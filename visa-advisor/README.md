@@ -124,12 +124,12 @@ Built on top of the inDrive a11y baseline (skip link, `:focus-visible` rings, `p
 ## How it works
 
 ```
-GitHub Pages (static)             Cloudflare Worker (proxy)              MiniMax API
+Browser (GitHub Pages)            Cloudflare Worker (proxy)              LLM API
 ─────────────────────             ─────────────────────────              ────────────
-visa-advisor/index.html ─fetch─→ api/visa-query.js ───Bearer───→ /v1/chat/completions
-visa-advisor/js/api.js   ←JSON── { markdown, caveats }  ←tokens──  minimax/MiniMax-M3
+visa-advisor/js/api.js ─POST───→ worker/src/index.js ───Bearer───→ /v1/chat/completions
+              ←JSON── { markdown, caveats? }  ←tokens────  minimax/MiniMax-M3
         │
-        └─fetch→ visa-advisor/visa-advisor-prompt.md (once, cached)
+        └─fetch (cached)─→ visa-advisor/visa-advisor-prompt.md
 ```
 
 The browser never sees the API key. The Worker holds it in `wrangler` secrets.
@@ -185,25 +185,31 @@ python3 -m http.server 8080
 
 ## Deploy
 
-### Worker (one-time setup)
+### Worker
 
 ```bash
-cd worker
-npm install
-npx wrangler login                     # opens browser, OAuth
-npx wrangler secret put LLM_API_KEY    # paste your key when prompted
-npx wrangler deploy                    # prints the workers.dev URL
+./scripts/deploy.sh
 ```
 
-Copy the printed URL (e.g. `https://visa-advisor.YOUR_SUBDOMAIN.workers.dev`) into `visa-advisor/js/api.js`:
+The script installs dependencies, checks the `LLM_API_KEY` wrangler secret (prompts to set it on first run), deploys the Worker, and prints the `workers.dev` URL. Copy that URL into `visa-advisor/js/api.js`:
 
 ```js
 const API_ENDPOINT = "https://visa-advisor.YOUR_SUBDOMAIN.workers.dev";
 ```
 
+The raw steps (what the script wraps):
+
+```bash
+cd worker
+npm ci
+npx wrangler login                     # opens browser, OAuth (one-time)
+npx wrangler secret put LLM_API_KEY    # paste your key when prompted
+npx wrangler deploy                    # prints the workers.dev URL
+```
+
 ### Static site
 
-Push to `main` → GitHub Pages auto-deploys. No build step.
+Push to `main` → GitHub Pages auto-deploys. No build step. Any static host (Netlify / Vercel / Cloudflare Pages) works the same way — drag-and-drop the `visa-advisor/` folder.
 
 ## Security notes
 
@@ -228,18 +234,6 @@ Not in MVP, intentionally:
 - Translation (English only)
 - Offline mode
 - Native mobile app
-
----
-
-## Deploy
-
-Any static host works — the app has no backend of its own.
-
-- **GitHub Pages** — push to `gh-pages` branch, enable Pages. Done.
-- **Netlify / Vercel / Cloudflare Pages** — drag-and-drop the folder.
-- **Custom domain** — point a CNAME at your Pages URL.
-
-For analytics, consider [Plausible](https://plausible.io/) or [Umami](https://umami.is/) — both privacy-respecting. Add the script tag in `index.html` if you want it.
 
 ---
 
