@@ -127,6 +127,23 @@ export function initForm({ onSubmit }) {
   }
 
   // Errors are surfaced only on submit attempt (and not while typing).
+  // We still need to keep the submit button's enabled state in sync as the
+  // user types — so a lightweight listener just recomputes `disabled`
+  // without showing error messages. Full error UI runs only on submit.
+  // We listen for both `input` (real typing) and `change` (programmatic
+  // value sets that don't fire `input`, e.g. some assistive tech and the
+  // browser's password-manager autofill).
+  function refreshSubmitState() {
+    const ok =
+      !!readField(nationalityEl) &&
+      !!readField(arrivalEl) &&
+      !!readField(destinationEl);
+    submitBtn.disabled = !ok;
+  }
+  [nationalityEl, arrivalEl, destinationEl].forEach((el) => {
+    el.addEventListener("input",  refreshSubmitState);
+    el.addEventListener("change", refreshSubmitState);
+  });
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -171,7 +188,7 @@ export function initForm({ onSubmit }) {
       if (data.arrival)     arrivalEl.value     = data.arrival;
       if (data.destination) destinationEl.value = data.destination;
       if (data.comments)    commentsEl.value   = data.comments;
-      validate();
+      refreshSubmitState();
     },
   };
 }
