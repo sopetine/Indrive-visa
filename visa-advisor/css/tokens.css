@@ -1,0 +1,214 @@
+/* ============================================================
+   DESIGN TOKENS — derived from inDrive.com Oymyakon DS v4
+   ============================================================ */
+
+:root {
+  /* ---------- Brand colors ---------- */
+  --main-green:        #C1F11D;
+  --main-green-hover:  #9DD90D;
+  --light-green:       #E4FF88;
+  --light-green-hover: #F6FFAA;
+  --additional-background-progressbuttonbrand: #66A20F;
+  --soft-beige:        #F4F3D8;
+  --neutral-beige:     #DCDBC7;
+  --main-dark:         #141414;
+  --main-grey:         rgba(20, 20, 20, 0.8);
+  --dark-grey-05:      rgba(20, 20, 20, 0.5);
+  --light-dark-03:     rgba(20, 20, 20, 0.35);
+  --main-white:        #FFFFFF;
+  --main-white-hover:  #EBECED;
+  --main-dark-bg:      #3F3F3F;
+  --main-light-bg:     #FFFEE9;
+  --main-blue-bg:      #E4FFF2;
+  --font-color:        #8C8C8C;
+  --error:             #FF5A5A;
+  --link:              #497FC6;
+
+  /* Translucent overlays */
+  --light-grey-01: rgba(0, 0, 0, 0.1);
+  --light-grey-02: rgb(0 0 0 / 20%);
+  --light-grey-03: rgba(0, 0, 0, 0.3);
+  --light-grey-06: rgba(0, 0, 0, 0.6);
+  --white-grey-06: rgba(255, 255, 255, 0.65);
+
+  /* Background / Border / Text + Icon (extensions palette) */
+  --background-primary:               #FFFFFF;
+  --background-secondary:             #F5F5F6;
+  --background-tertiary:              #DDDEDF;
+  --background-disabled:              #FAFAFA;
+  --background-brand:                 #C1F11D;
+  --background-accent:                #4087E1;
+  --border-primary:                   #E4E5E6;
+  --border-disabled:                  #EDEDED;
+  --border-selected:                  #3F4042;
+  --border-warning:                   #FFC13C;
+  --text-and-icon-primary:            #141414;
+  --text-and-icon-secondary:          #6A6B6E;
+  --text-and-icon-accent:             #4087E1;
+  --text-and-icon-disabled:           #BEC0C2;
+  --text-and-icon-oncolor:            #FFFFFF;
+  --extensions-text-and-icon-onbrand: #141414;
+  --extensions-text-and-icon-error:   #D13D35;
+  --extensions-text-and-icon-success: #02952B;
+  --extensions-text-and-icon-warning: #FFC13C;
+  --extensions-background-success:    #02952B;
+  --extensions-background-error:      #D13D35;
+  --extensions-background-warning:    #FFC13C;
+  --extensions-background-lightaccent:#E2F4FF;
+  --extensions-background-lighterror: #FFDFDE;
+  --extensions-background-lightsuccess:#E7FFAF;
+  --extensions-background-lightwarning:#FFF1C0;
+
+  /* Information triad (light/medium/dark per hue) */
+  --information-light-airlight:      #E2F4FF;
+  --information-medium-air:          #3890C3;
+  --information-dark-airdark:        #2C5F7C;
+  --information-light-brandlight:    #E7FFAF;
+  --information-medium-brand:        #C1F11D;
+  --information-dark-branddark:      #2F5F00;
+  --information-light-chicklight:    #FFF1C0;
+  --information-medium-chick:        #FFC13C;
+  --information-dark-chickdark:      #8C5C00;
+  --information-light-crablight:     #FFDFDE;
+  --information-medium-crab:         #D13D35;
+  --information-dark-crabdark:       #8C2A24;
+  --information-light-earthlight:    #E4FFAF;
+  --information-medium-earth:        #72AE16;
+  --information-dark-earthdark:      #3F6207;
+  --information-light-firelight:     #FBE0CF;
+  --information-medium-fire:         #CE6538;
+  --information-dark-firedark:       #72381F;
+  --information-light-pandalight:    #EDEDF0;
+  --information-medium-panda:        #96989C;
+  --information-dark-pandadark:      #55575A;
+  --information-light-sandlight:     #FAEAB6;
+  --information-medium-sand:         #D49E06;
+  --information-dark-sanddark:       #7A5803;
+  --information-light-senselight:    #FBDBE4;
+  --information-medium-sense:        #C75871;
+  --information-dark-sensedark:      #6E2F3F;
+  --information-light-stormlight:    #F1DEF6;
+  --information-medium-storm:        #B966BE;
+  --information-dark-stormdark:      #67386A;
+  --information-light-waterlight:    #D4F2E5;
+  --information-medium-water:        #33AC88;
+  --information-dark-waterdark:      #1B604C;
+  --information-light-whalelight:    #E2F4FF;
+  --information-medium-whale:        #4087E1;
+  --information-dark-whaledark:      #274D85;
+  --information-light-windlight:     #E1D9FF;
+  --information-medium-wind:         #7151FF;
+  --information-dark-winddark:       #3D2DAC;
+
+  /* Programs palette */
+  --programs-background-basicprimary:     #D9FCFF;
+  --programs-background-basicsecondary:   #B7F0FF;
+  --programs-background-newcomerprimary:  #D9FB76;
+  --programs-background-newcomersecondary:#C1F11D;
+  --programs-background-platinumprimary:  #7151FF;
+  --programs-background-platinumsecondary:#5642DB;
+  --programs-background-legendprimarystart:#5642DB;
+  --programs-background-legendprimaryend:  #9D09DC;
+  --programs-background-legendsecondary:   #383199;
+
+  /* Stick / Badge backgrounds (illustration chips) */
+  --stick-bg-1:     #FCF5FF;
+  --stick-bg-2:     #EBFFFF;
+  --stick-bg-3:     #E4FFF2;
+  --badge-bg-1:     #D9F1FF;
+  --skeleton-start: #ECEBD8;
+  --skeleton-end:   #F7F6E2;
+
+  /* ---------- Typography (commercial-safe substitutes) ---------- */
+  --font-family-body:     "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-family-heading:  "Inter Tight", "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-family-landing:  "Inter Tight", sans-serif;
+  --font-family-mono:     ui-monospace, SFMono-Regular, monospace;
+
+  /* Font size scale (compact/main/promo system) */
+  --fs-compact-caption: 10px;
+  --fs-compact-body:    14px;
+  --fs-compact-link:    14px;
+  --fs-main-caption:    12px;
+  --fs-main-body:       16px;
+  --fs-main-link:       16px;
+  --fs-promo-body:      20px;
+  --fs-promo-heading:   40px;
+
+  /* General scale */
+  --fs-xxs:  10px;  --lh-xxs:  14px;
+  --fs-xs:   12px;  --lh-xs:   16px;
+  --fs-s:    14px;  --lh-s:    19px;
+  --fs-m:    16px;  --lh-m:    22px;
+  --fs-ml:   18px;  --lh-ml:   24px;
+  --fs-l:    20px;  --lh-l:    27px;
+  --fs-xl:   24px;  --lh-xl:   32px;
+  --fs-xxl:  32px;  --lh-xxl:  44px;
+  --fs-xxxl: 40px;  --lh-xxxl: 53px;
+  --fs-4xl:  48px;  --lh-4xl:  60px;
+  --fs-5xl:  56px;  --lh-5xl:  64px;
+
+  /* Compact / main line-height aliases */
+  --lh-compact-body: 20px;
+
+  /* Font weights */
+  --fw-regular:  400;
+  --fw-medium:   500;
+  --fw-semibold: 600;
+  --fw-bold:     700;
+
+  /* Letter spacing */
+  --ls-tight: -0.02em;
+
+  /* Spacing scale (4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 / 96) */
+  --sp-0:   0;
+  --sp-1:   4px;
+  --sp-2:   8px;
+  --sp-3:   12px;
+  --sp-4:   16px;
+  --sp-5:   20px;
+  --sp-6:   24px;
+  --sp-8:   32px;
+  --sp-10:  40px;
+  --sp-12:  48px;
+  --sp-16:  64px;
+  --sp-24:  96px;
+
+  /* Radii */
+  --r-0:    0;
+  --r-1:    4px;
+  --r-2:    8px;
+  --r-3:    12px;
+  --r-4:    16px;
+  --r-5:    20px;
+  --r-6:    24px;
+  --r-pill: 9999px;
+
+  /* Shadows */
+  --shadow-s: 0 2px 8px 0 rgba(39, 44, 51, 0.12);
+  --shadow-m: 0 5px 20px 0 rgba(39, 44, 51, 0.08);
+  --shadow-l: 0 2px 28px 0 rgba(39, 44, 51, 0.08);
+  --shadow-xl: 0 21.29px 53.23px 0 rgba(20, 20, 20, 0.08);
+  --shadow-2xl: 0 40px 40px 0 rgba(20, 20, 20, 0.04);
+
+  /* Motion */
+  --dur-fast:   100ms;
+  --dur-base:   200ms;
+  --dur-medium: 300ms;
+  --dur-slow:   600ms;
+  --dur-slide:  5000ms;
+  --ease:       cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:   cubic-bezier(0, 0, 0.2, 1);
+
+  /* Layout */
+  --container-max:    1232px;
+  --container-narrow: 861px;
+  --header-height:    72px;
+  --section-gap:      var(--sp-24);
+
+  /* Breakpoints (use as @media (min-width: ...)) */
+  --bp-sm: 460px;
+  --bp-md: 768px;
+  --bp-lg: 1024px;
+  --bp-xl: 1280px;
+}

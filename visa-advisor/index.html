@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#C1F11D">
+  <meta name="color-scheme" content="light dark">
+  <title>Visa Advisor — Instant visa requirements for any passport</title>
+  <meta name="description" content="Get current visa requirements for any nationality, arrival country, and destination city. Powered by authoritative public sources. Not legal advice.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Visa Advisor">
+  <meta property="og:description" content="Current visa requirements for any (nationality, arrival, destination). Free. Not legal advice.">
+  <meta property="og:type" content="website">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Project styles (styleguide + visa-advisor additions) -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/reset.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/buttons.css">
+  <link rel="stylesheet" href="css/accessibility.css">
+  <link rel="stylesheet" href="css/advisor.css">
+</head>
+
+<body class="theme-light">
+
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- ============================================================
+       HEADER
+       ============================================================ -->
+  <header class="site-header site-header--advisor">
+    <div class="container nav">
+      <a href="/" class="logo" aria-label="Visa Advisor home">
+        <img src="images/logo-icon.svg" alt="" class="logo-mark" width="32" height="32">
+        <span class="logo-text">Visa Advisor</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       MAIN
+       ============================================================ -->
+  <main id="main">
+
+    <!-- ===== FORM VIEW (default) ===== -->
+    <section class="view view--form" data-view="form" aria-labelledby="form-title">
+      <div class="container container--narrow">
+        <header class="form-intro">
+          <h1 id="form-title">
+            Visa requirements,<br>
+            <mark class="hl">in seconds.</mark>
+          </h1>
+          <p class="form-subtitle">
+            Enter your passport and arrival country. Get the visa status, allowed stay, fees, processing time, and required documents — sourced from Wikipedia, IATA, and official <code>.gov</code> sites.
+          </p>
+        </header>
+
+        <form class="advisor-form" data-form novalidate>
+
+          <!-- Nationality -->
+          <div class="field" data-field="nationality">
+            <label for="input-nationality" class="field-label">
+              Nationality <span class="req" aria-hidden="true">*</span>
+            </label>
+            <input
+              type="text"
+              id="input-nationality"
+              name="nationality"
+              class="text-input"
+              autocomplete="off"
+              placeholder="e.g. Russian, American, Brazilian…"
+              required>
+            <p class="field-error" data-error-for="nationality" hidden></p>
+          </div>
+
+          <!-- Arrival country -->
+          <div class="field" data-field="arrival">
+            <label for="input-arrival" class="field-label">
+              Arrival <span class="req" aria-hidden="true">*</span>
+            </label>
+            <input
+              type="text"
+              id="input-arrival"
+              name="arrival"
+              class="text-input"
+              autocomplete="off"
+              placeholder="e.g. Georgia, Turkey, Serbia…"
+              required>
+            <p class="field-error" data-error-for="arrival" hidden></p>
+          </div>
+
+          <!-- Destination city -->
+          <div class="field" data-field="destination">
+            <label for="input-destination" class="field-label">
+              Destination <span class="req" aria-hidden="true">*</span>
+            </label>
+            <input
+              type="text"
+              id="input-destination"
+              name="destination"
+              class="text-input"
+              autocomplete="off"
+              placeholder="e.g. Tbilisi, Istanbul, Belgrade…"
+              required>
+            <p class="field-error" data-error-for="destination" hidden></p>
+          </div>
+
+          <!-- Comments (optional) -->
+          <div class="field" data-field="comments">
+            <label for="input-comments" class="field-label">
+              Comments <span class="field-label--hint">(optional)</span>
+            </label>
+            <textarea
+              id="input-comments"
+              name="comments"
+              class="comments-textarea"
+              rows="3"
+              placeholder="e.g. dual citizenship, layover in Istanbul, diplomatic passport…"></textarea>
+          </div>
+
+          <!-- Sanctioned destination notice -->
+          <div class="notice notice--error" data-notice="sanctioned" hidden role="alert">
+            <strong>Arrival restricted.</strong>
+            For Iran, North Korea, Syria, or Crimea / DNR / LNR, this tool does not provide visa guidance. Please consult a licensed immigration attorney.
+          </div>
+
+          <!-- Submit -->
+          <div class="form-actions">
+            <button type="submit" class="btn btn--primary btn--lg btn--block" data-submit>
+              Check requirements
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+
+        </form>
+
+        <p class="form-footnote">
+          Built from <a href="https://en.wikipedia.org/wiki/Visa_requirements_for_{nationality}_citizens" target="_blank" rel="noopener noreferrer">Wikipedia</a>, <a href="https://www.iatatravelcentre.com/" target="_blank" rel="noopener noreferrer">IATA Travel Centre</a>, and official <code>.gov</code> sources. Not legal advice.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===== REPORT VIEW ===== -->
+    <section class="view view--report" data-view="report" aria-labelledby="report-title" hidden>
+      <div class="container container--narrow">
+
+        <!-- Sticky action bar -->
+        <div class="action-bar" data-action-bar>
+          <div class="action-bar-route">
+            <span class="route-chip" data-report-from>—</span>
+            <span class="route-arrow" aria-hidden="true">→</span>
+            <span class="route-chip route-chip--alt" data-report-to>—</span>
+          </div>
+          <div class="action-bar-buttons">
+            <button type="button" class="btn btn--outline btn--sm" data-action="edit">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><path d="M4 20h4l10-10-4-4L4 16v4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+              Edit query
+            </button>
+            <button type="button" class="btn btn--outline btn--sm" data-action="copy">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" stroke-width="2"/></svg>
+              Copy
+            </button>
+            <button type="button" class="btn btn--primary btn--sm" data-action="share">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Share
+            </button>
+          </div>
+        </div>
+
+        <article class="report" data-report aria-live="polite">
+
+          <!-- Loading state -->
+          <div class="report-loading" data-report-loading hidden>
+            <div class="loading-pulse" aria-hidden="true"></div>
+            <p class="loading-text">Looking up visa requirements…</p>
+            <p class="loading-sub">Consulting Wikipedia, IATA, and official sources.</p>
+          </div>
+
+          <!-- Error state -->
+          <div class="report-error" data-report-error hidden role="alert">
+            <div class="report-error-icon" aria-hidden="true">⚠️</div>
+            <h2 data-report-error-title>Couldn't reach the service</h2>
+            <p data-report-error-body>Check your connection and try again.</p>
+            <button type="button" class="btn btn--primary" data-action="retry">Try again</button>
+          </div>
+
+          <!-- Clarify state -->
+          <div class="report-clarify" data-report-clarify hidden>
+            <h2>Quick clarification</h2>
+            <p data-clarify-question>Which passport will you travel on?</p>
+            <form class="clarify-form" data-clarify-form>
+              <div class="field">
+                <label for="input-clarify" class="field-label">Your answer</label>
+                <input type="text" id="input-clarify" class="text-input" required>
+              </div>
+              <button type="submit" class="btn btn--primary">Send answer</button>
+            </form>
+          </div>
+
+          <!-- Actual report (rendered by report.js) -->
+          <div class="report-body" data-report-body></div>
+
+        </article>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================================================
+       DISCLAIMER MODAL
+       ============================================================ -->
+  <div class="modal" data-modal hidden role="dialog" aria-modal="true" aria-labelledby="disclaimer-title">
+    <div class="modal-backdrop" data-modal-backdrop></div>
+    <div class="modal-card">
+      <header class="modal-header">
+        <span class="modal-icon" aria-hidden="true">ℹ️</span>
+        <h2 id="disclaimer-title">Before you begin</h2>
+      </header>
+      <div class="modal-body">
+        <p>This tool provides <strong>general information</strong> based on publicly available sources as of the date shown on each report. It is:</p>
+        <ul class="modal-list">
+          <li><strong>Not</strong> legal advice.</li>
+          <li><strong>Not</strong> a substitute for an immigration attorney.</li>
+          <li>Subject to rules that change frequently.</li>
+        </ul>
+        <p>Visa requirements are determined solely by the destination country's authorities. <strong>Always verify with the destination embassy or consulate before booking travel.</strong></p>
+        <p>For comprehensively sanctioned destinations (Iran, North Korea, Syria, Crimea / DNR / LNR), this tool does not provide visa guidance — please consult a licensed immigration attorney.</p>
+      </div>
+      <footer class="modal-footer">
+        <button type="button" class="btn btn--primary btn--block" data-modal-ack>I understand</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+  <footer class="site-footer">
+    <div class="container">
+      <p class="footer-line">
+        Visa Advisor · Open-source · Not legal advice ·
+        <a href="https://github.com/" target="_blank" rel="noopener noreferrer">Source</a>
+      </p>
+    </div>
+  </footer>
+
+  <!-- Live region for screen-reader announcements -->
+  <div class="sr-only" aria-live="polite" data-announcer></div>
+
+  <!-- Scripts (ES modules, no build step) -->
+  <script type="module" src="js/main.js"></script>
+
+</body>
+</html>

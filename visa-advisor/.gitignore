@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build artifacts (none today — keep clean)
+node_modules/
+dist/
+
+# OS metadata
+Thumbs.db
+
+# Env / secrets (when the LLM proxy lands)
+.env
+.env.local

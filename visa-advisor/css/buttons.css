@@ -1,0 +1,125 @@
+/* ============================================================
+   BUTTONS — mirrors inDrive .s2c4k1w + .bbs4ndg recipe
+   Two-layer: base chrome (.btn) + variant modifier (.btn--*)
+   ============================================================ */
+
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 10px;
+  font-family: var(--font-family-body);
+  font-size: var(--fs-s);
+  font-weight: var(--fw-semibold);
+  line-height: 20px;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-base) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+.btn:hover { transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+
+/* Primary (lime-green fill, dark text) — matches inDrive header CTA */
+.btn--primary {
+  background: var(--main-green);
+  color: var(--main-dark);
+  border: 2px solid var(--main-green);
+}
+.btn--primary:hover {
+  background: var(--main-green-hover);
+  border-color: var(--main-green-hover);
+}
+
+/* Secondary (dark fill, white text) — matches inDrive "Get the App" hero CTA */
+.btn--secondary {
+  background: var(--main-dark);
+  color: var(--main-white);
+  border: 2px solid var(--main-dark);
+}
+.btn--secondary:hover {
+  background: #000;
+  border-color: #000;
+}
+
+/* Outline (transparent fill, dark border) */
+.btn--outline {
+  background: transparent;
+  color: var(--main-dark);
+  border: 2px solid var(--main-dark);
+}
+.btn--outline:hover {
+  background: var(--main-dark);
+  color: var(--main-white);
+}
+
+/* Light outline (for use on dark backgrounds) */
+.btn--outline-light {
+  background: transparent;
+  color: var(--main-white);
+  border: 2px solid var(--main-white);
+}
+.btn--outline-light:hover {
+  background: var(--main-white);
+  color: var(--main-dark);
+}
+
+/* Link style (inline, with chevron) — matches inDrive "Learn more" */
+.btn--link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  background: transparent;
+  border: 0;
+  color: var(--main-dark);
+  font-weight: var(--fw-semibold);
+  font-size: inherit;
+  height: auto;
+  padding: var(--sp-2) 0;
+}
+.btn--link::after {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M9 5l7 7-7 7' stroke='currentColor' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") no-repeat center / contain;
+  transition: transform var(--dur-fast) var(--ease);
+}
+.btn--link:hover::after { transform: translateX(4px); }
+
+/* Sizing variants */
+.btn--sm {
+  height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+.btn--lg {
+  height: 56px;
+  padding: 0 28px;
+  font-size: var(--fs-m);
+}
+
+/* Ripple slot (visual flourish, mirrors inDrive .pharb8i) */
+.btn-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
+  pointer-events: none;
+}
+.btn:hover .btn-ripple { opacity: 0.08; }
+
+/* Full-width (mobile CTA in mega-menu) */
+.btn--block {
+  width: 100%;
+}
