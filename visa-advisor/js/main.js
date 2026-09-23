@@ -12,7 +12,9 @@ function start() {
     initModal();
     formApi = initForm({
       onSubmit: (input) => {
-        sessionStorage.setItem("visa-advisor.last-input", JSON.stringify(input));
+        try {
+          sessionStorage.setItem("visa-advisor.last-input", JSON.stringify(input));
+        } catch {}
         navigate("/report", serialize(input));
       },
     });
@@ -67,7 +69,8 @@ function start() {
       reportApi.setRoute(input.nationality, input.arrival, input.destination);
       reportApi.runQuery(input);
     } else {
-      const cached = sessionStorage.getItem("visa-advisor.last-input");
+      const cached = sessionStorage.getItem("visa-advisor.last-input")
+                  || localStorage.getItem("visa-advisor.last-input");
       if (cached) {
         const parsed = JSON.parse(cached);
         reportApi.setRoute(parsed.nationality, parsed.arrival, parsed.destination);

@@ -51,10 +51,33 @@ export function initForm({ onSubmit }) {
   const destinationEl= form.querySelector("#input-destination");
   const commentsEl   = form.querySelector("#input-comments");
   const sanctionedUI = form.querySelector("[data-notice=sanctioned]");
+  const pillEl       = document.querySelector("[data-view-pill]");
+  const pillRouteEl  = document.querySelector("[data-pill-route]");
 
-  // Pre-fill nationality from storage (free-form text only)
-  const lastNat = localStorage.getItem("visa-advisor.last-nationality");
-  if (lastNat) nationalityEl.value = lastNat;
+  // Hydrate the "Back to last report" pill from localStorage.
+  // Hydrate form fields too if a previous nationality is saved.
+  let cachedInput = null;
+  try {
+    const raw = localStorage.getItem("visa-advisor.last-input");
+    if (raw) cachedInput = JSON.parse(raw);
+  } catch { /* ignore parse errors */ }
+  if (cachedInput && cachedInput.nationality) {
+    nationalityEl.value = cachedInput.nationality;
+  }
+  if (cachedInput && pillEl && pillRouteEl) {
+    const route = [cachedInput.nationality, cachedInput.destination || cachedInput.arrival]
+      .filter(Boolean).join(" → ");
+    if (route) {
+      pillRouteEl.textContent = route;
+      pillEl.hidden = false;
+      const openBtn = pillEl.querySelector("[data-action=open-report]");
+      if (openBtn) {
+        openBtn.addEventListener("click", () => {
+          if (typeof onSubmit === "function") onSubmit(cachedInput);
+        });
+      }
+    }
+  }
 
   // Field-level error helpers
   function setError(field, msg) {
@@ -103,10 +126,7 @@ export function initForm({ onSubmit }) {
     return ok;
   }
 
-  // Re-validate on input
-  [nationalityEl, arrivalEl, destinationEl].forEach((el) => {
-    el.addEventListener("input", validate);
-  });
+  // Errors are surfaced only on submit attempt (and not while typing).
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -121,14 +141,19 @@ export function initForm({ onSubmit }) {
       comments:    readField(commentsEl),
     };
 
-    // Remember nationality for next visit
-    localStorage.setItem("visa-advisor.last-nationality", input.nationality);
+    // Remember the full last-input so the "Back to last report" pill
+    // (and the implicit Edit→Resubmit path) survive a tab refresh.
+    try {
+      localStorage.setItem("visa-advisor.last-input", JSON.stringify(input));
+    } catch { /* quota or privacy mode — ignore */ }
 
     onSubmit(input);
   });
 
-  // initial pass
-  validate();
+  // initial pass — set the submit button state without surfacing errors.
+  // Errors are only shown after the user attempts to submit.
+  clearErrors();
+  submitBtn.disabled = !readField(nationalityEl) || !readField(arrivalEl) || !readField(destinationEl);
 
   return {
     getFormData() {
@@ -164,14 +189,48 @@ const STATUS_CLASS = {
   "admission restricted / banned": "status-badge--restricted",
 };
 
-const STATUS_ICON = {
-  "visa-free": "✓",
-  "eta required": "✈",
-  "evisa required": "📄",
-  "visa on arrival": "🛂",
-  "embassy / consulate visa required": "🏛",
-  "admission restricted / banned": "⛔",
+const STATUS_TONE = {
+  "visa-free": "visa-free",
+  "eta required": "eta",
+  "evisa required": "evisa",
+  "visa on arrival": "voa",
+  "embassy / consulate visa required": "embassy",
+  "admission restricted / banned": "restricted",
 };
+
+const STATUS_ICON = {
+  "visa-free": "check_circle",
+  "eta required": "flight",
+  "evisa required": "description",
+  "visa on arrival": "badge",
+  "embassy / consulate visa required": "account_balance",
+  "admission restricted / banned": "block",
+};
+
+/* Material Symbols (webfont) — single source of truth for the rich icon set. */
+const ICONS = {
+  docs:     "article",
+  passport: "contact_page",
+  fee:      "credit_card",
+  time:     "schedule",
+  shield:   "shield",
+  rule:     "rule",
+  campaign: "campaign",
+  warn:     "warning_amber",
+  info:     "info",
+  external: "arrow_outward",
+  refresh:  "refresh",
+  help:     "help",
+  send:     "send",
+};
+function icon(name, tone = "neutral") {
+  const glyph = ICONS[name] || name;
+  return `<span class="icon-chip icon-chip--${tone}" aria-hidden="true"><span class="material-symbols-outlined">${glyph}</span></span>`;
+}
+function iconRaw(name) {
+  const glyph = ICONS[name] || name;
+  return `<span class="material-symbols-outlined" aria-hidden="true">${glyph}</span>`;
+}
 
 /**
  * Parse the LLM markdown report (per visa-advisor-prompt.md §2)
@@ -197,24 +256,24 @@ export function renderReport(body, markdown) {
   // Passport validity, Fee, Processing time — small grid
   const grid = document.createElement("div");
   grid.className = "report-grid";
-  if (sections.passportValidity) grid.appendChild(renderMetaSection("Passport validity", "🪪", sections.passportValidity));
-  if (sections.fee)              grid.appendChild(renderMetaSection("Fee", "💳", sections.fee));
-  if (sections.processingTime)   grid.appendChild(renderMetaSection("Processing time", "⏱", sections.processingTime));
+  if (sections.passportValidity) grid.appendChild(renderMetaSection("Passport validity", "passport", sections.passportValidity));
+  if (sections.fee)              grid.appendChild(renderMetaSection("Fee", "fee", sections.fee));
+  if (sections.processingTime)   grid.appendChild(renderMetaSection("Processing time", "time", sections.processingTime));
   if (grid.children.length) body.appendChild(grid);
 
   // Official URL CTA
   if (sections.officialUrl && /^https?:\/\//.test(sections.officialUrl.trim())) {
     body.appendChild(renderCta(sections.officialUrl));
   } else if (sections.officialUrl) {
-    body.appendChild(renderMetaSection("Official application", "🏛", sections.officialUrl));
+    body.appendChild(renderMetaSection("Official application", "shield", sections.officialUrl));
   }
 
   // Exception rules, Travel advisories (collapsible)
   if (sections.exceptions && sections.exceptions !== "None identified") {
-    body.appendChild(renderCollapsible("Exception rules", "📋", sections.exceptions));
+    body.appendChild(renderCollapsible("Exception rules", "rule", sections.exceptions));
   }
   if (sections.advisories && sections.advisories !== "None relevant") {
-    body.appendChild(renderCollapsible("Travel advisories", "⚠", sections.advisories));
+    body.appendChild(renderCollapsible("Travel advisories", "campaign", sections.advisories));
   }
 
   // Sources
@@ -279,12 +338,14 @@ function renderStatus(status, stay) {
   wrap.setAttribute("aria-labelledby", "report-status-title");
 
   const normalized = status.trim().toLowerCase();
-  const cls = STATUS_CLASS[Object.keys(STATUS_CLASS).find(k => normalized.includes(k)) || "embassy"] || STATUS_CLASS["embassy"];
-  const icon = STATUS_ICON[Object.keys(STATUS_ICON).find(k => normalized.includes(k)) || "embassy"] || "";
+  const key = Object.keys(STATUS_CLASS).find(k => normalized.includes(k)) || "embassy";
+  const cls = STATUS_CLASS[key];
+  const tone = STATUS_TONE[key];
+  const glyph = STATUS_ICON[key];
 
   wrap.innerHTML = `
     <span class="status-badge ${cls}" id="report-status-title" role="status">
-      <span aria-hidden="true">${icon}</span>
+      <span class="icon-chip icon-chip--${tone}" aria-hidden="true"><span class="material-symbols-outlined">${glyph}</span></span>
       <span>${escapeHtml(status.trim())}</span>
     </span>
     ${stay && stay !== "N/A" ? `
@@ -305,7 +366,7 @@ function renderDocsSection(md) {
   sec.className = "report-section";
   sec.innerHTML = `
     <h2 class="report-section-title">
-      <span class="report-section-title-icon" aria-hidden="true">📑</span>
+      ${icon("docs")}
       Required documents
     </h2>
     <ul class="report-section-value report-section-value--list">
@@ -315,12 +376,12 @@ function renderDocsSection(md) {
   return sec;
 }
 
-function renderMetaSection(title, icon, value) {
+function renderMetaSection(title, name, value) {
   const sec = document.createElement("section");
   sec.className = "report-section";
   sec.innerHTML = `
     <h2 class="report-section-title">
-      <span class="report-section-title-icon" aria-hidden="true">${icon}</span>
+      ${icon(name)}
       ${escapeHtml(title)}
     </h2>
     <div class="report-section-value">${escapeHtml(value.trim())}</div>
@@ -333,24 +394,24 @@ function renderCta(url) {
   sec.className = "report-section";
   sec.innerHTML = `
     <h2 class="report-section-title">
-      <span class="report-section-title-icon" aria-hidden="true">🏛</span>
+      ${icon("shield")}
       Official application
     </h2>
     <a class="report-section-value report-section-value--cta" href="${escapeAttr(url.trim())}" target="_blank" rel="noopener noreferrer">
       Open official site
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ${iconRaw("external")}
     </a>
   `;
   return sec;
 }
 
-function renderCollapsible(title, icon, value) {
+function renderCollapsible(title, name, value) {
   const sec = document.createElement("details");
   sec.className = "report-section report-section--collapsible";
   sec.innerHTML = `
     <summary class="report-section-summary">
       <h2 class="report-section-title" style="margin-bottom:0">
-        <span class="report-section-title-icon" aria-hidden="true">${icon}</span>
+        ${icon(name)}
         ${escapeHtml(title)}
       </h2>
     </summary>
@@ -362,7 +423,6 @@ function renderCollapsible(title, icon, value) {
 function renderSources(md) {
   const sec = document.createElement("section");
   sec.className = "report-section";
-  // Match markdown links
   const links = [];
   md.split("\n").forEach((line) => {
     const m = line.match(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/);
@@ -370,11 +430,11 @@ function renderSources(md) {
   });
   sec.innerHTML = `
     <h2 class="report-section-title">
-      <span class="report-section-title-icon" aria-hidden="true">🔗</span>
+      ${icon("external")}
       Sources
     </h2>
     <div class="report-section-value report-section-value--sources">
-      ${links.map(l => `<a href="${escapeAttr(l.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(l.label)}</a>`).join("")}
+      ${links.map(l => `<a href="${escapeAttr(l.url)}" target="_blank" rel="noopener noreferrer">${iconRaw("external")}${escapeHtml(l.label)}</a>`).join("")}
     </div>
   `;
   return sec;
@@ -385,7 +445,7 @@ function renderCaveats(text) {
   wrap.className = "report-caveats";
   wrap.setAttribute("role", "note");
   wrap.innerHTML = `
-    <div class="report-caveats-title">⚠️ Caveats</div>
+    <div class="report-caveats-title">${icon("warn", "warn")} Caveats</div>
     <div class="report-caveats-body">${escapeHtml(text.trim())}</div>
   `;
   return wrap;
@@ -394,7 +454,7 @@ function renderCaveats(text) {
 function renderDisclaimer(date) {
   const wrap = document.createElement("div");
   wrap.className = "report-disclaimer";
-  wrap.innerHTML = `ℹ️ This is general information based on publicly available sources as of ${escapeHtml(date)}. Visa requirements change frequently and are determined solely by the destination country's authorities. Always verify with the destination embassy or consulate before booking travel. <strong>Not legal advice. Not a substitute for an immigration attorney.</strong>`;
+  wrap.innerHTML = `${iconRaw("info")} This is general information based on publicly available sources as of ${escapeHtml(date)}. Visa requirements change frequently and are determined solely by the destination country's authorities. Always verify with the destination embassy or consulate before booking travel. <strong>Not legal advice. Not a substitute for an immigration attorney.</strong>`;
   return wrap;
 }
 
@@ -431,17 +491,46 @@ export function initReportView({ onEdit }) {
     shareBtn:    document.querySelector("[data-action=share]"),
     editBtn:     document.querySelector("[data-action=edit]"),
     stepper:     document.querySelector("[data-stepper]"),
+    progress:    document.querySelector("[data-action-bar-progress]"),
+    progressFill:document.querySelector("[data-action-bar-progress-fill]"),
+    progressSteps: document.querySelectorAll("[data-progress-step]"),
   };
 
-  const STEP_ORDER = ["prompt", "consult", "compile"];
-  function setStep(name) {
-    if (!root.stepper) return;
-    const idx = STEP_ORDER.indexOf(name);
-    root.stepper.querySelectorAll(".step").forEach((li) => {
-      const liIdx = STEP_ORDER.indexOf(li.dataset.step);
-      li.classList.toggle("is-active", liIdx === idx);
-      li.classList.toggle("is-done",   liIdx >= 0 && liIdx < idx);
-    });
+  /* Inline progress strip lives in the sticky action bar. The in-DOM
+     stepper stays as an aria-live region for screen readers but is
+     visually hidden. */
+  const PROGRESS_STEPS = ["prompt", "consult", "compile"];
+  function setProgress(name) {
+    const idx = PROGRESS_STEPS.indexOf(name);
+    if (root.progressSteps) {
+      root.progressSteps.forEach((el) => {
+        const elIdx = PROGRESS_STEPS.indexOf(el.dataset.progressStep);
+        el.classList.toggle("is-active", elIdx === idx);
+        el.classList.toggle("is-done",   elIdx >= 0 && elIdx < idx);
+      });
+    }
+    if (root.stepper) {
+      const idx2 = PROGRESS_STEPS.indexOf(name);
+      root.stepper.querySelectorAll(".step").forEach((li) => {
+        const liIdx = PROGRESS_STEPS.indexOf(li.dataset.step);
+        li.classList.toggle("is-active", liIdx === idx2);
+        li.classList.toggle("is-done",   liIdx >= 0 && liIdx < idx2);
+      });
+    }
+  }
+
+  function showProgress(percent) {
+    if (root.progress)     root.progress.hidden = false;
+    if (root.progressFill) root.progressFill.style.width = `${percent}%`;
+  }
+  function hideProgress() {
+    if (root.progress)     root.progress.hidden = true;
+    if (root.progressFill) root.progressFill.style.width = "0%";
+    if (root.progressSteps) {
+      root.progressSteps.forEach((el) => {
+        el.classList.remove("is-active", "is-done");
+      });
+    }
   }
 
   // Wire action buttons
@@ -449,12 +538,20 @@ export function initReportView({ onEdit }) {
   root.retryBtn.addEventListener("click", () => {
     if (root._lastInput) runQuery(root._lastInput);
   });
-  root.copyBtn.addEventListener("click", () => {
-    const text = root.body.innerText;
-    navigator.clipboard.writeText(text).then(() => {
-      announce("Report copied to clipboard");
-      flashBtn(root.copyBtn, "Copied!");
-    });
+  root.copyBtn.addEventListener("click", async () => {
+    if (!root._lastMarkdown) {
+      announce("No report to copy yet");
+      flashBtn(root.copyBtn, "Nothing to copy");
+      return;
+    }
+    try {
+      const mode = await copyReport(root._lastMarkdown, root._lastCaveats);
+      announce(mode === "rich" ? "Rich-text report copied" : "Plain-text report copied");
+      flashBtn(root.copyBtn, mode === "rich" ? "Copied!" : "Copied as text");
+    } catch (err) {
+      announce("Copy failed");
+      flashBtn(root.copyBtn, "Copy failed");
+    }
   });
   root.shareBtn.addEventListener("click", () => {
     const url = window.location.href;
@@ -506,22 +603,27 @@ export function initReportView({ onEdit }) {
   async function runQuery(input) {
     root._lastInput = input;
     show("loading");
-    setStep("prompt");
+    setProgress("prompt");
+    showProgress(0);
+    // Brief beat so the user sees the first step land before swap.
+    const advanceTick = setTimeout(() => {
+      setProgress("consult");
+      showProgress(50);
+    }, 120);
     try {
-      // Advance the stepper as soon as the prompt load + fetch are issued.
-      // We don't have a fine-grained callback here, so we tick to "consult"
-      // on the next frame after the call begins — the user perceives the
-      // transition within ~16 ms even on slow networks.
-      const advanceTick = setTimeout(() => setStep("consult"), 120);
-
       const data = await queryAdvisor(input);
       clearTimeout(advanceTick);
-      setStep("compile");
+      setProgress("compile");
+      showProgress(100);
 
       if (data.type === "clarify") {
+        hideProgress();
         showClarify(data.question);
         return;
       }
+      // Cache for Copy
+      root._lastMarkdown = data.markdown;
+      root._lastCaveats  = data.caveats;
       // Render markdown
       renderReport(root.body, data.markdown);
       // Append caveats (if provided) above the disclaimer
@@ -532,8 +634,10 @@ export function initReportView({ onEdit }) {
       // Brief beat so the user sees "Compiling your report" land before swap.
       await new Promise(r => setTimeout(r, 220));
       show("report");
+      hideProgress();
       announce("Visa report ready");
     } catch (err) {
+      hideProgress();
       const isTimeout = err.code === "TIMEOUT" || err.name === "AbortError";
       const isPrompt  = err.code === "PROMPT_LOAD";
       const title = isPrompt  ? "Couldn't load advisor prompt"
@@ -569,4 +673,315 @@ function announce(text) {
   if (!el) return;
   el.textContent = "";
   setTimeout(() => { el.textContent = text; }, 30);
+}
+
+/* ──────────────────────────────────────────────────────────
+   Rich-text Copy — HTML + plain-text via ClipboardItem
+   Pastes as styled report into Teams / Outlook / Gmail / Slack (rich),
+   or as readable sections into Notion / text editors / terminals (plain).
+   ────────────────────────────────────────────────────────── */
+
+const CLIP = {
+  font: "font-family:'Inter','Helvetica Neue',Arial,sans-serif",
+  fontHead: "font-family:'Inter Tight','Inter','Helvetica Neue',Arial,sans-serif",
+  c_text:    "#141414",
+  c_sub:     "#6A6B6E",
+  c_border:  "#E4E5E6",
+  c_card:    "#FFFFFF",
+  c_soft:    "#F4F3D8",
+  c_neutral: "#DCDBC7",
+  c_green:   "#C1F11D",
+  c_greenDk: "#9DD90D",
+  c_lightGr: "#E4FF88",
+  c_warnBg:  "#FFF1C0",
+  c_warnBd:  "#FFC13C",
+  c_warnTxt: "#8C5C00",
+  c_discBg:  "#F5F5F6",
+  c_accent:  "#4087E1",
+  c_white:   "#FFFFFF",
+  c_black:   "#141414",
+};
+
+const ICON_GLYPH = {
+  docs:     "📄", passport: "🪪", fee:      "💳",
+  time:     "🕐", shield:   "🛡", rule:     "📋",
+  campaign: "📢", warn:     "⚠️", info:     "ℹ️",
+  external: "↗", visaFree:  "✓",
+};
+
+function escapeHtmlAttr(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function escapeHtmlSafe(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function clipWrap(inner) {
+  return (
+    `<div style="max-width:680px;margin:0 auto;${CLIP.font};color:${CLIP.c_text};line-height:1.5;">` +
+    inner +
+    `</div>`
+  );
+}
+function clipChip(glyph, tone) {
+  const bg = {
+    "visa-free": CLIP.c_green,
+    "eta":       CLIP.c_lightGr,
+    "evisa":     "#E2F4FF", "evisaText": "#2C5F7C",
+    "voa":       "#E4FFAF", "voaText":   "#3F6207",
+    "embassy":   "#FFF1C0", "embassyText": CLIP.c_warnTxt,
+    "restricted":"#FFDFDE", "restrictedText": "#8C2A24",
+    "warn":      CLIP.c_warnBg, "warnText": CLIP.c_warnTxt,
+    "neutral":   CLIP.c_soft,
+    "accent":    "transparent",
+  }[tone] || CLIP.c_soft;
+  const txt = ({
+    "evisa":     "#2C5F7C",
+    "voa":       "#3F6207",
+    "embassy":   CLIP.c_warnTxt,
+    "restricted":"#8C2A24",
+    "warn":      CLIP.c_warnTxt,
+    "accent":    CLIP.c_accent,
+  })[tone] || CLIP.c_text;
+  return (
+    `<span style="display:inline-flex;align-items:center;justify-content:center;` +
+    `width:28px;height:28px;border-radius:8px;background:${escapeHtmlSafe(bg)};color:${escapeHtmlSafe(txt)};` +
+    `font-size:18px;line-height:1;flex-shrink:0;margin-right:8px;vertical-align:-4px;">` +
+    escapeHtmlSafe(glyph) +
+    `</span>`
+  );
+}
+
+function clipSection(title, name, bodyHtml) {
+  return (
+    `<div style="margin-top:16px;padding:20px 24px;background:${CLIP.c_card};` +
+    `border:1px solid ${CLIP.c_border};border-radius:16px;">` +
+    `<h3 style="margin:0 0 12px;font-size:13px;font-weight:600;color:${CLIP.c_sub};` +
+    `text-transform:uppercase;letter-spacing:0.04em;${CLIP.font};">` +
+    clipChip(ICON_GLYPH[name] || "•", "neutral") +
+    escapeHtmlSafe(title) +
+    `</h3>` +
+    bodyHtml +
+    `</div>`
+  );
+}
+
+function buildReportHtml(md, caveats) {
+  const s       = parseSections(md);
+  const meta    = extractMeta(md);
+  const normSt  = (s.visaStatus || "").trim().toLowerCase();
+  const stKey   = Object.keys(STATUS_CLASS).find(k => normSt.includes(k)) || "embassy";
+  const statusClass = STATUS_CLASS[stKey];
+  const tone    = STATUS_TONE[stKey];
+  const glyph   = STATUS_ICON[stKey];
+
+  // Status hero
+  const chipBg = ({
+    "visa-free": CLIP.c_green,
+    "eta":       CLIP.c_lightGr,
+    "evisa":     "#E2F4FF",
+    "voa":       "#E4FFAF",
+    "embassy":   "#FFF1C0",
+    "restricted":"#FFDFDE",
+  })[tone] || "#FFF1C0";
+  const chipFg = ({
+    "visa-free": CLIP.c_black,
+    "eta":       CLIP.c_black,
+    "evisa":     "#2C5F7C",
+    "voa":       "#3F6207",
+    "embassy":   CLIP.c_warnTxt,
+    "restricted":"#8C2A24",
+  })[tone] || CLIP.c_black;
+  const stay = s.allowedStay && s.allowedStay.trim() !== "N/A" ? s.allowedStay.trim() : "";
+  const statusHtml =
+    `<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;` +
+    `padding:20px 24px;background:${CLIP.c_soft};border:1px solid ${CLIP.c_neutral};border-radius:20px;">` +
+    `<span style="display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 20px;border-radius:9999px;` +
+    `background:${escapeHtmlSafe(chipBg)};color:${escapeHtmlSafe(chipFg)};` +
+    `${CLIP.fontHead};font-weight:700;font-size:18px;letter-spacing:-0.02em;">` +
+    `<span style="display:inline-flex;align-items:center;justify-content:center;` +
+    `width:24px;height:24px;border-radius:6px;background:${escapeHtmlSafe(chipBg)};` +
+    `color:${escapeHtmlSafe(chipFg)};font-size:14px;">${escapeHtmlSafe(ICON_GLYPH.visaFree)}</span>` +
+    escapeHtmlSafe((s.visaStatus || "").trim()) +
+    `</span>` +
+    (stay ? (
+      `<span style="text-align:right;">` +
+      `<span style="display:block;font-size:11px;color:${CLIP.c_sub};text-transform:uppercase;letter-spacing:0.05em;">Allowed stay</span>` +
+      `<span style="display:block;font-size:16px;font-weight:600;color:${CLIP.c_text};margin-top:2px;">` +
+      escapeHtmlSafe(stay) +
+      `</span></span>`
+    ) : "") +
+    `</div>`;
+
+  const sections = [];
+
+  // Required documents
+  if (s.requiredDocs) {
+    const items = s.requiredDocs.split("\n")
+      .map(l => l.replace(/^[-•*]\s+/, "").trim())
+      .filter(Boolean)
+      .map(t =>
+        `<li style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:15px;line-height:1.45;">` +
+        `<span style="flex-shrink:0;display:inline-block;width:6px;height:6px;border-radius:9999px;background:${CLIP.c_green};margin-top:8px;"></span>` +
+        escapeHtmlSafe(t) +
+        `</li>`
+      ).join("");
+    sections.push(clipSection(
+      "Required documents", "docs",
+      `<ul style="list-style:none;padding:0;margin:0;">${items}</ul>`,
+    ));
+  }
+
+  // Passport / Fee / Processing (3-col table for email safety)
+  const grid = [];
+  if (s.passportValidity) grid.push({ title: "Passport validity", name: "passport", body: s.passportValidity });
+  if (s.fee)              grid.push({ title: "Fee",                name: "fee",       body: s.fee });
+  if (s.processingTime)   grid.push({ title: "Processing time",   name: "time",      body: s.processingTime });
+  if (grid.length) {
+    const cells = grid.map((g, i) => {
+      const pad = i === 0 ? "" : "padding-left:8px;";
+      return (
+        `<td style="width:33.33%;vertical-align:top;${pad}">` +
+        clipSection(g.title, g.name, `<div style="font-size:15px;line-height:1.45;color:${CLIP.c_text};">${escapeHtmlSafe(g.body.trim())}</div>`) +
+        `</td>`
+      );
+    }).join("");
+    sections.push(
+      `<table role="presentation" style="width:100%;border-collapse:collapse;margin-top:16px;border:0;">` +
+      `<tr><td style="padding:0;">` +
+      `<table role="presentation" style="width:100%;border-collapse:collapse;"><tr>${cells}</tr></table>` +
+      `</td></tr></table>`
+    );
+  }
+
+  // Official application CTA
+  if (s.officialUrl && /^https?:\/\//.test(s.officialUrl.trim())) {
+    sections.push(clipSection(
+      "Official application", "shield",
+      `<a href="${escapeHtmlAttr(s.officialUrl.trim())}" style="display:flex;align-items:center;justify-content:center;` +
+      `gap:8px;min-height:48px;padding:0 24px;background:${CLIP.c_green};color:${CLIP.c_black};` +
+      `border:2px solid ${CLIP.c_green};border-radius:12px;font-weight:600;font-size:15px;text-decoration:none;">` +
+      `Open official site <span style="font-size:14px;">${escapeHtmlSafe(ICON_GLYPH.external)}</span>` +
+      `</a>`,
+    ));
+  } else if (s.officialUrl) {
+    sections.push(clipSection(
+      "Official application", "shield",
+      `<div style="font-size:15px;line-height:1.45;color:${CLIP.c_text};">${escapeHtmlSafe(s.officialUrl.trim())}</div>`,
+    ));
+  }
+
+  // Caveats
+  if (caveats) {
+    sections.push(
+      `<div style="margin-top:16px;padding:16px 20px;background:${CLIP.c_warnBg};` +
+      `border:1px solid ${CLIP.c_warnBd};border-radius:16px;color:${CLIP.c_warnTxt};">` +
+      `<div style="font-weight:700;font-size:15px;margin-bottom:8px;display:flex;align-items:center;">` +
+      clipChip(ICON_GLYPH.warn, "warn") + `<span>Caveats</span>` +
+      `</div>` +
+      `<div style="font-size:14px;line-height:1.5;white-space:pre-wrap;">${escapeHtmlSafe(caveats.trim())}</div>` +
+      `</div>`
+    );
+  }
+
+  // Sources
+  if (s.sources) {
+    const links = [];
+    s.sources.split("\n").forEach((line) => {
+      const m = line.match(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/);
+      if (m) links.push({ label: m[1], url: m[2] });
+    });
+    if (links.length) {
+      const linksHtml = links.map(l =>
+        `<a href="${escapeHtmlAttr(l.url)}" style="display:inline-flex;align-items:center;gap:6px;` +
+        `color:${CLIP.c_accent};font-size:14px;text-decoration:underline;margin-right:12px;margin-top:4px;">` +
+        `<span style="font-size:14px;">${escapeHtmlSafe(ICON_GLYPH.external)}</span>` +
+        `<span>${escapeHtmlSafe(l.label)}</span>` +
+        `</a>`
+      ).join("");
+      sections.push(clipSection(
+        "Sources", "external",
+        `<div style="display:block;">${linksHtml}</div>`,
+      ));
+    }
+  }
+
+  // Meta + Disclaimer
+  const date = meta.lastVerified || new Date().toISOString().slice(0, 10);
+  const metaHtml = `<p style="margin-top:16px;font-size:12px;color:${CLIP.c_sub};text-align:center;">Last verified: ${escapeHtmlSafe(date)}</p>`;
+  const discHtml =
+    `<div style="margin-top:12px;padding:12px 16px;background:${CLIP.c_discBg};border-radius:12px;` +
+    `font-size:12px;line-height:1.5;color:${CLIP.c_sub};">` +
+    `<span style="display:inline-block;margin-right:4px;color:${CLIP.c_sub};font-size:14px;vertical-align:-2px;">${escapeHtmlSafe(ICON_GLYPH.info)}</span>` +
+    `This is general information based on publicly available sources as of ${escapeHtmlSafe(date)}. ` +
+    `Visa requirements change frequently and are determined solely by the destination country's authorities. ` +
+    `Always verify with the destination embassy or consulate before booking travel. ` +
+    `<strong>Not legal advice. Not a substitute for an immigration attorney.</strong>` +
+    `</div>`;
+
+  return clipWrap(statusHtml + sections.join("") + metaHtml + discHtml);
+}
+
+function buildReportText(md, caveats) {
+  const s    = parseSections(md);
+  const meta = extractMeta(md);
+  const date = meta.lastVerified || new Date().toISOString().slice(0, 10);
+  const out  = [];
+
+  const push = (label, value) => {
+    const v = (value || "").trim();
+    if (v) out.push(label + "\n" + v);
+  };
+  push("Visa status",        s.visaStatus);
+  push("Allowed stay",       s.allowedStay);
+  push("Passport validity",  s.passportValidity);
+  push("Fee",                s.fee);
+  push("Processing time",    s.processingTime);
+
+  if (s.requiredDocs) {
+    const items = s.requiredDocs.split("\n")
+      .map(l => l.replace(/^[-•*]\s+/, "").trim())
+      .filter(Boolean);
+    if (items.length) out.push("Required documents\n- " + items.join("\n- "));
+  }
+  push("Official application", s.officialUrl);
+  push("Exception rules",       s.exceptions);
+  push("Travel advisories",     s.advisories);
+  if (s.sources) {
+    const links = [];
+    s.sources.split("\n").forEach((line) => {
+      const m = line.match(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/);
+      if (m) links.push({ label: m[1], url: m[2] });
+    });
+    if (links.length) {
+      out.push("Sources\n" + links.map(l => `- ${l.label} (${l.url})`).join("\n"));
+    }
+  }
+  if (caveats && caveats.trim()) out.push("Caveats\n" + caveats.trim());
+  out.push(`Last verified: ${date}`);
+  out.push("---");
+  out.push(`This is general information based on publicly available sources as of ${date}. Not legal advice. Not a substitute for an immigration attorney.`);
+
+  return out.join("\n\n");
+}
+
+async function copyReport(md, caveats) {
+  const html = buildReportHtml(md, caveats);
+  const text = buildReportText(md, caveats);
+  // Modern: both blobs → rich text in mail/chat, plain text elsewhere.
+  if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html":  new Blob([html], { type: "text/html"  }),
+          "text/plain": new Blob([text], { type: "text/plain" }),
+        }),
+      ]);
+      return "rich";
+    } catch {
+      // Fall through to plain-only.
+    }
+  }
+  await navigator.clipboard.writeText(text);
+  return "plain";
 }

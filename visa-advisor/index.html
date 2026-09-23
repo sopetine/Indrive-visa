@@ -17,6 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..24,400,0,0&display=swap">
 
   <!-- Project styles (styleguide + visa-advisor additions) -->
   <link rel="stylesheet" href="css/tokens.css">
@@ -61,6 +62,15 @@
           </p>
         </header>
 
+        <div class="view-pill" data-view-pill hidden>
+          <button type="button" class="view-pill-btn" data-action="open-report">
+            <span class="material-symbols-outlined">arrow_back</span>
+            <span class="view-pill-text">Back to last report</span>
+            <span class="view-pill-route" data-pill-route></span>
+            <span class="material-symbols-outlined view-pill-chevron">chevron_right</span>
+          </button>
+        </div>
+
         <form class="advisor-form" data-form novalidate>
 
           <!-- Nationality -->
@@ -79,36 +89,36 @@
             <p class="field-error" data-error-for="nationality" hidden></p>
           </div>
 
-          <!-- Arrival country -->
-          <div class="field" data-field="arrival">
-            <label for="input-arrival" class="field-label">
-              Arrival <span class="req" aria-hidden="true">*</span>
-            </label>
-            <input
-              type="text"
-              id="input-arrival"
-              name="arrival"
-              class="text-input"
-              autocomplete="off"
-              placeholder="e.g. Georgia, Turkey, Serbia…"
-              required>
-            <p class="field-error" data-error-for="arrival" hidden></p>
-          </div>
-
-          <!-- Destination city -->
-          <div class="field" data-field="destination">
-            <label for="input-destination" class="field-label">
-              Destination <span class="req" aria-hidden="true">*</span>
-            </label>
-            <input
-              type="text"
-              id="input-destination"
-              name="destination"
-              class="text-input"
-              autocomplete="off"
-              placeholder="e.g. Tbilisi, Istanbul, Belgrade…"
-              required>
-            <p class="field-error" data-error-for="destination" hidden></p>
+          <!-- Arrival + Destination in one row on >=540px -->
+          <div class="field-row" data-field-row="arr-dst">
+            <div class="field" data-field="arrival">
+              <label for="input-arrival" class="field-label">
+                Arrival <span class="req" aria-hidden="true">*</span>
+              </label>
+              <input
+                type="text"
+                id="input-arrival"
+                name="arrival"
+                class="text-input"
+                autocomplete="off"
+                placeholder="e.g. Georgia, Turkey…"
+                required>
+              <p class="field-error" data-error-for="arrival" hidden></p>
+            </div>
+            <div class="field" data-field="destination">
+              <label for="input-destination" class="field-label">
+                Destination <span class="req" aria-hidden="true">*</span>
+              </label>
+              <input
+                type="text"
+                id="input-destination"
+                name="destination"
+                class="text-input"
+                autocomplete="off"
+                placeholder="e.g. Tbilisi, Istanbul…"
+                required>
+              <p class="field-error" data-error-for="destination" hidden></p>
+            </div>
           </div>
 
           <!-- Comments (optional) -->
@@ -133,8 +143,9 @@
           <!-- Submit -->
           <div class="form-actions">
             <button type="submit" class="btn btn--primary btn--lg btn--block" data-submit>
+              <span class="material-symbols-outlined btn-icon">search</span>
               Check requirements
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="material-symbols-outlined btn-icon">arrow_forward</span>
             </button>
           </div>
 
@@ -152,57 +163,64 @@
 
         <!-- Sticky action bar -->
         <div class="action-bar" data-action-bar>
-          <div class="action-bar-route">
-            <span class="route-chip" data-report-from>—</span>
-            <span class="route-arrow" aria-hidden="true">→</span>
-            <span class="route-chip route-chip--alt" data-report-to>—</span>
+          <div class="action-bar-row">
+            <div class="action-bar-route">
+              <span class="route-chip" data-report-from>—</span>
+              <span class="material-symbols-outlined route-arrow">arrow_forward</span>
+              <span class="route-chip route-chip--alt" data-report-to>—</span>
+            </div>
+            <div class="action-bar-buttons">
+              <button type="button" class="btn btn--outline btn--sm" data-action="edit">
+                <span class="material-symbols-outlined btn-icon">edit</span>
+                Edit
+              </button>
+              <button type="button" class="btn btn--outline btn--sm" data-action="copy">
+                <span class="material-symbols-outlined btn-icon">content_copy</span>
+                Copy
+              </button>
+              <button type="button" class="btn btn--primary btn--sm" data-action="share">
+                <span class="material-symbols-outlined btn-icon">share</span>
+                Share
+              </button>
+            </div>
           </div>
-          <div class="action-bar-buttons">
-            <button type="button" class="btn btn--outline btn--sm" data-action="edit">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><path d="M4 20h4l10-10-4-4L4 16v4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-              Edit query
-            </button>
-            <button type="button" class="btn btn--outline btn--sm" data-action="copy">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10" stroke="currentColor" stroke-width="2"/></svg>
-              Copy
-            </button>
-            <button type="button" class="btn btn--primary btn--sm" data-action="share">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Share
-            </button>
+          <div class="action-bar-progress" data-action-bar-progress hidden aria-hidden="true">
+            <div class="action-bar-progress-row">
+              <span class="action-bar-progress-step is-active" data-progress-step="prompt">Loading advisor knowledge base</span>
+              <span class="action-bar-progress-step" data-progress-step="consult">Consulting sources</span>
+              <span class="action-bar-progress-step" data-progress-step="compile">Compiling report</span>
+            </div>
+            <div class="action-bar-progress-track">
+              <span class="action-bar-progress-fill" data-action-bar-progress-fill></span>
+            </div>
           </div>
         </div>
 
         <article class="report" data-report aria-live="polite">
 
-          <!-- Loading state -->
-          <div class="report-loading" data-report-loading hidden>
+          <!-- Loading state (aria-live only — visual progress is in the action bar) -->
+          <div class="report-loading" data-report-loading aria-hidden="true">
             <ol class="stepper" data-stepper aria-label="Generating report">
-              <li class="step is-active" data-step="prompt">
-                <span class="step-dot" aria-hidden="true"></span>
-                <span class="step-label">Loading advisor knowledge base</span>
-              </li>
-              <li class="step" data-step="consult">
-                <span class="step-dot" aria-hidden="true"></span>
-                <span class="step-label">Consulting Wikipedia, IATA, official sources</span>
-              </li>
-              <li class="step" data-step="compile">
-                <span class="step-dot" aria-hidden="true"></span>
-                <span class="step-label">Compiling your report</span>
-              </li>
+              <li class="step is-active" data-step="prompt"><span class="step-dot" aria-hidden="true"></span><span class="step-label">Loading advisor knowledge base</span></li>
+              <li class="step" data-step="consult"><span class="step-dot" aria-hidden="true"></span><span class="step-label">Consulting Wikipedia, IATA, official sources</span></li>
+              <li class="step" data-step="compile"><span class="step-dot" aria-hidden="true"></span><span class="step-label">Compiling your report</span></li>
             </ol>
           </div>
 
           <!-- Error state -->
           <div class="report-error" data-report-error hidden role="alert">
-            <div class="report-error-icon" aria-hidden="true">⚠️</div>
+            <div class="icon-chip icon-chip--warn report-error-icon" aria-hidden="true"><span class="material-symbols-outlined">warning_amber</span></div>
             <h2 data-report-error-title>Couldn't reach the service</h2>
             <p data-report-error-body>Check your connection and try again.</p>
-            <button type="button" class="btn btn--primary" data-action="retry">Try again</button>
+            <button type="button" class="btn btn--primary" data-action="retry">
+              <span class="material-symbols-outlined btn-icon">refresh</span>
+              Try again
+            </button>
           </div>
 
           <!-- Clarify state -->
           <div class="report-clarify" data-report-clarify hidden>
+            <div class="icon-chip icon-chip--neutral report-clarify-icon" aria-hidden="true"><span class="material-symbols-outlined">help</span></div>
             <h2>Quick clarification</h2>
             <p data-clarify-question>Which passport will you travel on?</p>
             <form class="clarify-form" data-clarify-form>
@@ -210,11 +228,14 @@
                 <label for="input-clarify" class="field-label">Your answer</label>
                 <input type="text" id="input-clarify" class="text-input" required>
               </div>
-              <button type="submit" class="btn btn--primary">Send answer</button>
+              <button type="submit" class="btn btn--primary">
+                <span class="material-symbols-outlined btn-icon">send</span>
+                Send answer
+              </button>
             </form>
           </div>
 
-          <!-- Actual report (rendered by report.js) -->
+          <!-- Actual report (rendered by ui.js) -->
           <div class="report-body" data-report-body></div>
 
         </article>
@@ -231,7 +252,7 @@
     <div class="modal-backdrop" data-modal-backdrop></div>
     <div class="modal-card">
       <header class="modal-header">
-        <span class="modal-icon" aria-hidden="true">ℹ️</span>
+        <span class="icon-chip icon-chip--neutral modal-icon" aria-hidden="true"><span class="material-symbols-outlined">info</span></span>
         <h2 id="disclaimer-title">Before you begin</h2>
       </header>
       <div class="modal-body">
