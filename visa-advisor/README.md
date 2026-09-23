@@ -2,7 +2,7 @@
 
 > Open-source web app that returns current visa requirements for any (nationality, arrival, destination) — sourced from Wikipedia, IATA, and official `.gov` sites.
 >
-> **Status:** UI complete. LLM integration is a stub — see [Adding your LLM](#adding-your-llm).
+> **Status:** Live. Powered by **MiniMax M3** via a Cloudflare Worker proxy that holds the API key. See [How it works](#how-it-works).
 
 ---
 
@@ -53,23 +53,31 @@ You should see the disclaimer modal on first load. Accept it to reach the form. 
 ## File tree
 
 ```
-visa-advisor/
-├── index.html                ← SPA shell (form + report views, hash routing)
-├── README.md                 ← This file
-├── LICENSE                   ← MIT
-├── .gitignore
-├── css/
-│   ├── tokens.css            ← Design tokens (from inDrive styleguide)
-│   ├── reset.css             ← Modern CSS reset
-│   ├── base.css              ← Typography, container, badge
-│   ├── buttons.css           ← Button system
-│   ├── accessibility.css     ← A11y patches
-│   └── advisor.css           ← Visa-advisor-specific styles
-└── js/
-    ├── countries.js          ← ~120 country list + sanctioned set
-    ├── api.js                ← LLM API stub + mock data
-    ├── ui.js                 ← Form, modal, combobox, report renderer
-    └── main.js               ← Bootstrap + hash router
+.
+├── visa-advisor/                 ← static site (deployed to GitHub Pages)
+│   ├── index.html                ← SPA shell (form + report views, hash routing)
+│   ├── README.md                 ← This file
+│   ├── LICENSE                   ← MIT
+│   ├── .gitignore
+│   ├── visa-advisor-prompt.md    ← System prompt sent to the LLM (fetched at runtime)
+│   ├── css/
+│   │   ├── tokens.css            ← Design tokens (from inDrive styleguide)
+│   │   ├── reset.css             ← Modern CSS reset
+│   │   ├── base.css              ← Typography, container, badge
+│   │   ├── buttons.css           ← Button system
+│   │   ├── accessibility.css     ← A11y patches
+│   │   └── advisor.css           ← Visa-advisor-specific styles + stepper
+│   └── js/
+│       ├── countries.js          ← ~120 country list + sanctioned set
+│       ├── api.js                ← Calls the Worker proxy; fetches & caches system prompt
+│       ├── ui.js                 ← Form, modal, stepper, report renderer
+│       └── main.js               ← Bootstrap + hash router
+└── worker/                       ← Cloudflare Worker proxy (hides the LLM API key)
+    ├── package.json
+    ├── wrangler.toml
+    ├── .dev.vars.example         ← Template for local secrets (gitignored)
+    └── src/
+        └── index.js              ← Edge handler: CORS → prompt fetch → LLM call → response
 ```
 
 The first five CSS files are **copied verbatim** from the inDrive styleguide (`../css/`) — the inDrive design language is the visual source of truth. If you update the inDrive files, propagate the changes here.
@@ -113,43 +121,32 @@ Built on top of the inDrive a11y baseline (skip link, `:focus-visible` rings, `p
 
 ---
 
-## Adding your LLM
+## How it works
 
-The UI is wired but the LLM is not. Three things to do:
-
-### 1. Set up a serverless proxy
-
-**Never embed your API key in the browser.** Create a thin proxy that hides the key. Vercel/Cloudflare Worker examples:
-
-```js
-// Vercel Edge Function — api/visa-query.ts
-export const config = { runtime: "edge" };
-
-export default async function handler(req: Request) {
-  const body = await req.json();
-  const systemPrompt = await Deno.readTextFile("./visa-advisor-prompt.md");
-
-  const res = await fetch("https://api.your-provider.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.LLM_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "your-model-id",
-      system: systemPrompt,
-      messages: [{ role: "user", content: buildUserMessage(body) }],
-    }),
-  });
-  // parse the LLM response and return it in the contract below
-}
+```
+GitHub Pages (static)             Cloudflare Worker (proxy)              MiniMax API
+─────────────────────             ─────────────────────────              ────────────
+visa-advisor/index.html ─fetch─→ api/visa-query.js ───Bearer───→ /v1/chat/completions
+visa-advisor/js/api.js   ←JSON── { markdown, caveats }  ←tokens──  minimax/MiniMax-M3
+        │
+        └─fetch→ visa-advisor/visa-advisor-prompt.md (once, cached)
 ```
 
-### 2. Implement the response contract
+The browser never sees the API key. The Worker holds it in `wrangler` secrets.
 
-The UI (`js/ui.js → renderReport`) parses a structured markdown response. Your proxy must return one of:
+### What lives where
 
-**On success:**
+| File | Role |
+|---|---|
+| `visa-advisor/visa-advisor-prompt.md` | The full system prompt. **Edit this to change advisor behavior.** Fetched by the browser at runtime and sent to the Worker. |
+| `visa-advisor/js/api.js` | Sets `API_ENDPOINT`, fetches & caches the prompt, POSTs form values to the Worker, normalizes the response. |
+| `worker/src/index.js` | Edge handler: CORS preflight, validates the request, calls the LLM with `system` + `user` messages, unwraps the §9 JSON fence, returns the contract shape. |
+| `worker/wrangler.toml` | Vars: `LLM_ENDPOINT`, `LLM_MODEL`, `ALLOWED_ORIGIN`. Secret: `LLM_API_KEY`. |
+| `visa-advisor/index.html` + `ui.js` + `advisor.css` | The 3-step stepper ("Loading knowledge base → Consulting sources → Compiling report") replaces the old single pulse during live calls. |
+
+### Response contract (enforced by the Worker)
+
+The system prompt instructs the LLM to wrap its answer in a ```json fence (see §9 of `visa-advisor-prompt.md`). The Worker unwraps that fence and forwards:
 
 ```json
 {
@@ -159,39 +156,61 @@ The UI (`js/ui.js → renderReport`) parses a structured markdown response. Your
 }
 ```
 
-The markdown must follow the section order defined in `visa-advisor-prompt.md` §2:
-
-```
-### Visa status
-### Allowed stay
-### Passport validity rule
-### Fee
-### Typical processing time
-### Required documents (typical)
-### Official application URL
-### Exception rules
-### Travel advisories
-### Last verified
-### Sources
-```
-
-**If the LLM needs clarification** (spec §2.4, e.g. dual citizenship):
+…or, if the LLM needs clarification (per §4 of the prompt):
 
 ```json
 { "type": "clarify", "question": "Which passport will you travel on?" }
 ```
 
-The UI will display a question input and re-send the original query with the user's answer appended as a `clarify` field.
+The `markdown` field follows the section order in §2 of the prompt. The UI in `js/ui.js → renderReport()` parses it; the disclaimer is appended automatically.
 
-### 3. Point the UI at your proxy
+## Local development
 
-Edit [`js/api.js`](./js/api.js) — set `API_ENDPOINT`:
+```bash
+# 1. Run the Worker locally (holds the key in env vars)
+cd worker
+cp .dev.vars.example .dev.vars          # then fill in your LLM_API_KEY
+npm install
+npx wrangler dev                        # http://localhost:8787
 
-```js
-const API_ENDPOINT = "/api/visa-query"; // or your full URL
+# 2. Point the static site at the local Worker
+#    edit visa-advisor/js/api.js:
+#      const API_ENDPOINT = "http://localhost:8787";
+
+# 3. Serve the static site
+cd ../visa-advisor
+python3 -m http.server 8080
+# → http://localhost:8080
 ```
 
-When set, `queryAdvisor()` will `POST` the form data there instead of returning the mock report.
+## Deploy
+
+### Worker (one-time setup)
+
+```bash
+cd worker
+npm install
+npx wrangler login                     # opens browser, OAuth
+npx wrangler secret put LLM_API_KEY    # paste your key when prompted
+npx wrangler deploy                    # prints the workers.dev URL
+```
+
+Copy the printed URL (e.g. `https://visa-advisor.YOUR_SUBDOMAIN.workers.dev`) into `visa-advisor/js/api.js`:
+
+```js
+const API_ENDPOINT = "https://visa-advisor.YOUR_SUBDOMAIN.workers.dev";
+```
+
+### Static site
+
+Push to `main` → GitHub Pages auto-deploys. No build step.
+
+## Security notes
+
+- **Key:** The LLM API key lives only in the Worker's secrets. It is never bundled into the browser JS, never committed, and never logged.
+- **Public proxy:** Anyone with the Worker URL can spend tokens. For a personal/demo tool this is acceptable; for production, add IP-based rate limiting at the Worker (e.g. via Cloudflare KV).
+- **System prompt trust:** The browser sends the prompt to the Worker; the Worker uses it verbatim. If you want to lock the prompt, pin a SHA-256 hash in `worker/src/index.js` and reject mismatches.
+- **Output sanitisation:** All LLM output is HTML-escaped before insertion in `js/ui.js → renderReport()`. Markdown links from `### Sources` are matched with a strict regex; no raw HTML is ever injected.
 
 ---
 

@@ -396,6 +396,48 @@
   color: var(--text-and-icon-secondary);
 }
 
+/* ---------- Stepper (replaces single pulse for live LLM calls) ---------- */
+.stepper {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  display: inline-grid;
+  gap: var(--sp-3);
+  text-align: left;
+  max-width: 360px;
+}
+.step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: var(--text-and-icon-secondary);
+  font-size: var(--fs-s);
+  transition: color var(--dur-base) var(--ease);
+}
+.step-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--r-pill);
+  background: var(--border-primary);
+  flex-shrink: 0;
+  transition: background var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
+}
+.step.is-active { color: var(--text-and-icon-primary); font-weight: var(--fw-medium); }
+.step.is-active .step-dot {
+  background: var(--main-green);
+  box-shadow: 0 0 0 4px rgba(193, 241, 29, 0.25);
+  animation: step-pulse 1.4s var(--ease) infinite;
+}
+.step.is-done   .step-dot { background: var(--main-green); }
+.step.is-done   { color: var(--text-and-icon-primary); }
+@keyframes step-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(1.18); opacity: 0.85; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .step.is-active .step-dot { animation: none; }
+}
+
 .report-error,
 .report-clarify {
   padding: var(--sp-8);

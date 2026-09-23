@@ -430,7 +430,19 @@ export function initReportView({ onEdit }) {
     copyBtn:     document.querySelector("[data-action=copy]"),
     shareBtn:    document.querySelector("[data-action=share]"),
     editBtn:     document.querySelector("[data-action=edit]"),
+    stepper:     document.querySelector("[data-stepper]"),
   };
+
+  const STEP_ORDER = ["prompt", "consult", "compile"];
+  function setStep(name) {
+    if (!root.stepper) return;
+    const idx = STEP_ORDER.indexOf(name);
+    root.stepper.querySelectorAll(".step").forEach((li) => {
+      const liIdx = STEP_ORDER.indexOf(li.dataset.step);
+      li.classList.toggle("is-active", liIdx === idx);
+      li.classList.toggle("is-done",   liIdx >= 0 && liIdx < idx);
+    });
+  }
 
   // Wire action buttons
   root.editBtn.addEventListener("click", () => onEdit());
@@ -494,8 +506,18 @@ export function initReportView({ onEdit }) {
   async function runQuery(input) {
     root._lastInput = input;
     show("loading");
+    setStep("prompt");
     try {
+      // Advance the stepper as soon as the prompt load + fetch are issued.
+      // We don't have a fine-grained callback here, so we tick to "consult"
+      // on the next frame after the call begins — the user perceives the
+      // transition within ~16 ms even on slow networks.
+      const advanceTick = setTimeout(() => setStep("consult"), 120);
+
       const data = await queryAdvisor(input);
+      clearTimeout(advanceTick);
+      setStep("compile");
+
       if (data.type === "clarify") {
         showClarify(data.question);
         return;
@@ -507,16 +529,20 @@ export function initReportView({ onEdit }) {
         const dis = root.body.querySelector(".report-disclaimer");
         if (dis) root.body.insertBefore(renderCaveats(data.caveats), dis);
       }
+      // Brief beat so the user sees "Compiling your report" land before swap.
+      await new Promise(r => setTimeout(r, 220));
       show("report");
       announce("Visa report ready");
     } catch (err) {
       const isTimeout = err.code === "TIMEOUT" || err.name === "AbortError";
-      showError(
-        isTimeout ? "Request timed out" : "Couldn't reach the service",
-        isTimeout
-          ? "The advisor took too long to respond. Please try again."
-          : "Check your connection and try again."
-      );
+      const isPrompt  = err.code === "PROMPT_LOAD";
+      const title = isPrompt  ? "Couldn't load advisor prompt"
+                  : isTimeout ? "Request timed out"
+                              : "Couldn't reach the service";
+      const body  = isPrompt  ? "The advisor's knowledge base failed to load. Refresh the page and try again."
+                  : isTimeout ? "The advisor took too long to respond. Please try again."
+                              : (err.message || "Check your connection and try again.");
+      showError(title, body);
     }
   }
 

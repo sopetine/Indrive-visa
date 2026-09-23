@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS metadata
+Thumbs.db
+
+# Cloudflare Worker
+worker/node_modules/
+worker/.dev.vars
+worker/.wrangler/
+worker/wrangler.toml.local

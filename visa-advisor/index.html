@@ -177,9 +177,20 @@
 
           <!-- Loading state -->
           <div class="report-loading" data-report-loading hidden>
-            <div class="loading-pulse" aria-hidden="true"></div>
-            <p class="loading-text">Looking up visa requirements…</p>
-            <p class="loading-sub">Consulting Wikipedia, IATA, and official sources.</p>
+            <ol class="stepper" data-stepper aria-label="Generating report">
+              <li class="step is-active" data-step="prompt">
+                <span class="step-dot" aria-hidden="true"></span>
+                <span class="step-label">Loading advisor knowledge base</span>
+              </li>
+              <li class="step" data-step="consult">
+                <span class="step-dot" aria-hidden="true"></span>
+                <span class="step-label">Consulting Wikipedia, IATA, official sources</span>
+              </li>
+              <li class="step" data-step="compile">
+                <span class="step-dot" aria-hidden="true"></span>
+                <span class="step-label">Compiling your report</span>
+              </li>
+            </ol>
           </div>
 
           <!-- Error state -->

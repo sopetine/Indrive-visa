@@ -1,0 +1,11 @@
+name = "visa-advisor"
+main = "src/index.js"
+compatibility_date = "2025-09-23"
+
+[vars]
+LLM_ENDPOINT  = "https://api.MiniMax.chat/v1/chat/completions"
+LLM_MODEL     = "minimax/MiniMax-M3"
+ALLOWED_ORIGIN = "https://sopetine.github.io"
+
+# Secrets (run `wrangler secret put LLM_API_KEY`):
+# LLM_API_KEY
