@@ -6,25 +6,25 @@ import { initModal } from "./ui.js";
 import { initForm } from "./ui.js";
 import { initReportView } from "./ui.js";
 
-const ROUTES = {
-  "":      showForm,
-  "/":     showForm,
-  "/report": showReport,
-};
-
 function start() {
-  initModal();
-
-  const formApi = initForm({
-    onSubmit: (input) => {
-      sessionStorage.setItem("visa-advisor.last-input", JSON.stringify(input));
-      navigate("/report", serialize(input));
-    },
-  });
-
-  const reportApi = initReportView({
-    onEdit: () => navigate("/", ""),
-  });
+  let formApi, reportApi;
+  try {
+    initModal();
+    formApi = initForm({
+      onSubmit: (input) => {
+        sessionStorage.setItem("visa-advisor.last-input", JSON.stringify(input));
+        navigate("/report", serialize(input));
+      },
+    });
+    reportApi = initReportView({
+      onEdit: () => navigate("/", ""),
+    });
+  } catch (err) {
+    console.error("[visa-advisor] init failed:", err);
+    const ann = document.querySelector("[data-announcer]");
+    if (ann) ann.textContent = "Advisor failed to initialize. Open DevTools for details.";
+    return;
+  }
 
   window.addEventListener("hashchange", handleRoute);
   handleRoute();
@@ -32,7 +32,14 @@ function start() {
   function handleRoute() {
     const hash = window.location.hash.slice(1) || "/";
     const [path, qs] = hash.split("?");
-    const handler = ROUTES[path] || showForm;
+    // ROUTES is built here (not at module top level) because showForm/showReport
+    // are declared inside start() and aren't in scope until start() runs.
+    const routes = {
+      "":        showForm,
+      "/":       showForm,
+      "/report": showReport,
+    };
+    const handler = routes[path] || showForm;
     handler(qs ? Object.fromEntries(new URLSearchParams(qs)) : {});
   }
 
