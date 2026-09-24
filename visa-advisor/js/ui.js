@@ -280,11 +280,8 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
   }
 
   // "Before you book" numbered checklist (critical types drive color)
-  // v0.7.2 — pass server-matched fact snippets so each ↗ Verify link
-  // has an inline "Grounded in: <domain>" snippet under the value.
-  const factMatches = Array.isArray(research?.factMatches) ? research.factMatches : [];
   if (crit.length) {
-    body.appendChild(renderBeforeYouBook(crit, sections, ann, factMatches));
+    body.appendChild(renderBeforeYouBook(crit, sections, ann));
   }
 
   // Required documents — bullets get per-source verify links
@@ -322,10 +319,13 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
     body.appendChild(renderResearchLog(searchQs));
   }
 
-  // Sources (N) — deduped URLs grouped by domain (v0.5)
+  // Sources (N) — v0.8 tag cloud split by cited vs surveyed.
   let sourcesSection = null;
   if (sources.length) {
-    sourcesSection = renderSourcesSection(sources);
+    const citedUrls = new Set(
+      crit.map((c) => (c.source || "").trim()).filter((u) => /^https?:\/\//.test(u))
+    );
+    sourcesSection = renderSourcesSection(sources, citedUrls);
     body.appendChild(sourcesSection);
   }
 
@@ -348,6 +348,32 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
       sources:        sources.length,
       inlineCitations: ann.length,
     }));
+  }
+
+  // v0.7.1+ — defensive: if the renderer only produced a Sources section
+  // and every parsed `### ` heading was empty, surface that to the user
+  // instead of silently showing an empty body. Helps debug worker/prompt
+  // regressions where `markdown` arrives without section headings.
+  const sectionKeys = ["visaStatus","allowedStay","passportValidity","fee","processingTime","requiredDocs","officialUrl","exceptions","advisories"];
+  const filledKeys = sectionKeys.filter((k) => sections[k] && String(sections[k]).trim());
+  if (filledKeys.length === 0 && sources.length > 0) {
+    const note = document.createElement("div");
+    note.className = "report-section";
+    note.style.borderLeft = "3px solid var(--extensions-background-warning, #FFC13C)";
+    note.style.background = "var(--extensions-background-lightwarning, #FFF1C0)";
+    note.innerHTML = `
+      <div class="report-section-title">
+        <span class="material-symbols-outlined">warning_amber</span>
+        Report body empty
+      </div>
+      <p class="report-section-value">
+        The advisor returned <strong>${sources.length}</strong> source${sources.length === 1 ? "" : "s"} but no parsed sections
+        (<code style="font-family:var(--font-family-mono);">### </code> visa status, fee, processing, docs, etc.).
+        Showing sources only.
+      </p>
+    `;
+    body.insertBefore(note, body.firstChild);
+    console.warn("[visa-advisor] renderReport: only sources arrived, no parsed sections. markdown length:", (markdown || "").length);
   }
   if (metaLineParts.length) {
     const meta_el = document.createElement("p");
@@ -626,28 +652,90 @@ function renderResearchLog(queries) {
   return sec;
 }
 
-/* v0.5 — "Sources (N)" section. Deduplicated URLs grouped by registrable
-   domain, each click-out link opens in a new tab. */
-function renderSourcesSection(sources) {
-  const grouped = groupSourcesByDomain(sources);
-  const groupKeys = Object.keys(grouped).sort();
+/* v0.8 — "Sources (N)" section rendered as two stacked tag clusters:
+     (1) Cited in this report  — green-filled pill chips, URL appears in
+         critical[].source.
+     (2) Surveyed but not cited — outlined pill chips, worker collected them
+         but the LLM didn't cite them inline.
+   Each chip shows the short site name (registrable domain), wraps naturally
+   onto multiple rows, is a clickable hyperlink, and carries a `data-source-url`
+   attribute that the v0.7.1 reachability probe keys off. Sorted by criticality
+   within each cluster. */
 
-  const groupsHtml = groupKeys.map(domain => {
-    const items = grouped[domain].map(s => {
-      const title = (s.title || s.url || "").trim();
-      const safeTitle = escapeHtml(title);
-      const safeUrl = escapeHtmlAttr(s.url);
-      return `<li class="report-source-item" data-source-url="${safeUrl}">
-        <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="report-source-link">${safeTitle}</a>
-        <div class="report-source-url">${safeUrl}</div>
-        <span class="report-source-reach" data-reach="pending" aria-label="Reachability: pending" title="Reachability: pending"></span>
-      </li>`;
-    }).join("");
-    return `<div class="report-source-group">
-      <div class="report-source-domain">${escapeHtml(domain)}</div>
-      <ul class="report-source-list">${items}</ul>
-    </div>`;
-  }).join("");
+function shortSite(source) {
+  if (source && source.domain && source.domain.length) {
+    return source.domain.replace(/^www\./, "");
+  }
+  try {
+    const host = new URL(source.url).hostname.replace(/^www\./, "");
+    const parts = host.split(".");
+    if (parts.length <= 2) return host;
+    const lastTwo = parts.slice(-2).join(".");
+    const lastThree = parts.slice(-3).join(".");
+    const twoPartTlds = ["co.uk","co.jp","com.au","co.nz","com.br","co.in","ac.uk","gov.uk"];
+    if (twoPartTlds.includes(lastTwo)) return lastThree;
+    return lastTwo;
+  } catch {
+    return (source.url || "").slice(0, 24);
+  }
+}
+
+function criticalityTier(source) {
+  const dom = (source.domain || "").toLowerCase();
+  if (/\.(gov|gouv|go\.jp)$/.test(dom))            return 0; // authoritative gov
+  if (/(wikipedia|iatatravelcentre|passportindex)/.test(dom)) return 1;
+  if (/(un\.int|nato\.int|europa\.eu)/.test(dom))   return 2; // multilateral
+  return 3;
+}
+
+function sortSources(arr) {
+  return arr.slice().sort((a, b) => {
+    const ta = criticalityTier(a);
+    const tb = criticalityTier(b);
+    if (ta !== tb) return ta - tb;
+    const da = (a.domain || "").toLowerCase();
+    const db = (b.domain || "").toLowerCase();
+    if (da !== db) return da.localeCompare(db);
+    return (a.url || "").localeCompare(b.url || "");
+  });
+}
+
+function renderSourceChip(s, cited) {
+  const safeUrl   = escapeHtmlAttr(s.url);
+  const site      = escapeHtml(shortSite(s) || s.url);
+  const titleAttr = escapeHtmlAttr(s.url);
+  return `<a class="report-source-tag ${cited ? "is-cited" : "is-surveyed"}"
+    href="${safeUrl}"
+    target="_blank"
+    rel="noopener noreferrer"
+    title="${titleAttr}"
+    data-source-url="${safeUrl}">
+    <span class="reach-dot" data-reach="pending" aria-hidden="true"></span>
+    <span class="tag-label">${site}</span>
+  </a>`;
+}
+
+function renderSourcesCluster(sources, cited, label) {
+  const sorted = sortSources(sources);
+  const chipsHtml = sorted.map((s) => renderSourceChip(s, cited)).join("");
+  const safeLabel = escapeHtml(label);
+  return `<div class="report-sources-cluster">
+    <div class="report-sources-cluster-label">${safeLabel} — ${sources.length}</div>
+    <div class="report-sources-tags">${chipsHtml}</div>
+  </div>`;
+}
+
+function renderSourcesSection(sources, citedUrls) {
+  const cited = sources.filter((s) => citedUrls && citedUrls.has(s.url));
+  const surveyed = sources.filter((s) => !citedUrls || !citedUrls.has(s.url));
+
+  const clusters = [];
+  if (cited.length) {
+    clusters.push(renderSourcesCluster(cited, true, "Cited in this report"));
+  }
+  if (surveyed.length) {
+    clusters.push(renderSourcesCluster(surveyed, false, "Surveyed but not cited"));
+  }
 
   const sec = document.createElement("section");
   sec.className = "report-section report-sources";
@@ -659,7 +747,7 @@ function renderSourcesSection(sources) {
       Sources
       <span class="report-section-count">${sources.length} ${sources.length === 1 ? "source" : "sources"}</span>
     </h2>
-    <div class="report-source-groups">${groupsHtml}</div>
+    ${clusters.join("")}
     <p class="report-source-reach-summary" data-reach-summary>Reachability: probing 0 / ${sources.length} …</p>
   `;
   return sec;
@@ -748,18 +836,11 @@ function renderResearchMetaLine({ queries, citedSources, sources, inlineCitation
   return `Research: ${parts.join(" · ")}`;
 }
 
-function renderBeforeYouBook(critical, sections, annotations, factMatches = []) {
+function renderBeforeYouBook(critical, sections, annotations) {
   const wrap = document.createElement("aside");
   wrap.className = "before-you-book";
   wrap.setAttribute("role", "region");
   wrap.setAttribute("aria-labelledby", "before-you-book-title");
-
-  // v0.7.2 (L5) — look up server-matched snippet per fact for the
-  // "Grounded in" quote line under each Verify link.
-  const matchByLabel = {};
-  for (const m of factMatches) {
-    if (m && m.label) matchByLabel[m.label] = m;
-  }
 
   const items = critical.map((c, i) => {
     const type = c.type && CRITICAL_TYPE_META[c.type] ? c.type : "";
@@ -773,15 +854,6 @@ function renderBeforeYouBook(critical, sections, annotations, factMatches = []) 
     const verify = lookupUrl
       ? `<a class="critical-step-verify" href="${escapeAttr(lookupUrl)}" target="_blank" rel="noopener noreferrer" data-snippet="${escapeAttr(`Step ${i + 1}: ${c.label || ""}`)}">↗ Verify</a>`
       : "";
-    // Server-side match: short snippet + small "grounded in: domain" line
-    // under the value, so the user sees *why* the fact is cited from that URL.
-    const fm = matchByLabel[c.label];
-    const grounded = fm
-      ? `<div class="critical-step-grounded">
-           <span class="critical-step-grounded-label">Grounded in <code>${escapeHtml(extractHostname(fm.matchedUrl))}</code>:</span>
-           <blockquote class="critical-step-snippet">${escapeHtml(fm.snippet)}</blockquote>
-         </div>`
-      : "";
     const cls = type ? `critical-step critical-step--${type}` : "critical-step";
     return `
       <li class="${cls}" data-critical-type="${type}">
@@ -792,7 +864,6 @@ function renderBeforeYouBook(critical, sections, annotations, factMatches = []) 
         <div class="critical-step-body">
           <div class="critical-step-label">${label}</div>
           ${value ? `<div class="critical-step-value">${value}</div>` : ""}
-          ${grounded}
         </div>
         ${verify}
       </li>
@@ -806,20 +877,10 @@ function renderBeforeYouBook(critical, sections, annotations, factMatches = []) 
     </h2>
     <p class="before-you-book-intro">
       Confirm each item below before paying for non-refundable travel.
-      Each step's <em>Grounded in</em> quote shows the exact Tavily snippet the
-      Worker matched against the claim; click <em>↗ Verify</em> to read it in context.
     </p>
     <ol class="before-you-book-list">${items}</ol>
   `;
   return wrap;
-}
-
-function extractHostname(url) {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url.slice(0, 32);
-  }
 }
 
 function renderDocsSection(md, rawTitle, annotations, fullMarkdown) {
@@ -1350,9 +1411,7 @@ export function initReportView({ onEdit }) {
         searchQueries: Array.isArray(data.searchQueries) ? data.searchQueries : [],
         sources:       Array.isArray(data.sources)       ? data.sources       : [],
         sourcesReturned: Number.isFinite(data.sourcesReturned) ? data.sourcesReturned : 0,
-        researchWarning:    typeof data.researchWarning    === "string" ? data.researchWarning    : "",
-        serverSearchAvailable: data.serverSearchAvailable === true,
-        factMatches:    Array.isArray(data.factMatches) ? data.factMatches : [],
+        researchWarning: typeof data.researchWarning === "string" ? data.researchWarning : "",
       };
       renderReport(
         root.body,
