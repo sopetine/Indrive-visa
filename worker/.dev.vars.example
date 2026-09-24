@@ -1,3 +1,4 @@
 # Local secrets for `wrangler dev`. Copy to `.dev.vars` and fill in real values.
 # `.dev.vars` is git-ignored.
 LLM_API_KEY="sk-cp-REPLACE_ME"
+TAVILY_API_KEY="tvly-REPLACE_ME"

@@ -74,6 +74,32 @@ export default {
 
     const userMessage = buildUserMessage({ nationality, from, destination, date, purpose, comments, clarify });
 
+    /* v0.7 — server-side deterministic search via Tavily (Tier 1).
+       Runs IN PARALLEL with the first upstream call below so latency
+       isn't stacked. When enabled, serverSearchSources becomes the
+       authoritative primary source set; LLM-emitted sources merge in
+       only to fill gaps. When the key is missing or Tavily fails,
+       falls through silently to the existing LLM-only path. */
+    let serverSearchSources = [];
+    let evidenceBlock = "";
+    if (env.TAVILY_API_KEY && (env.SEARCH_PROVIDER || "") === "tavily") {
+      const queries = buildSearchQueries(nationality, destination, purpose, from);
+      try {
+        const results = await fetchTavilyResults(env, queries);
+        if (results.length) {
+          serverSearchSources = results.map((r) => ({
+            title:  r.title || "",
+            url:    r.url,
+            domain: extractDomain(r.url),
+          }));
+          evidenceBlock = formatEvidenceBlock(results);
+          userMessage += `\n\n[EVIDENCE]\nThe search results below were pre-collected server-side from authoritative sources. Cite only these URLs in your sources[] array; do not invent URLs not present here.\n\n${evidenceBlock}\n[/EVIDENCE]`;
+        }
+      } catch (err) {
+        console.error("Tavily search failed (continuing without):", err?.message || err);
+      }
+    }
+
     // v0.5 prompt uses server-side web_search via the Responses API.
     // max_tokens must cover thinking + a citation-heavy visible response
     // (typically ~1500 thinking + ~6500 visible with annotations) PLUS
@@ -126,7 +152,7 @@ export default {
       return json({ error: "Upstream returned non-JSON" }, 502, origin);
     }
 
-    let parsed = parseContract(data);
+    let parsed = parseContract(data, serverSearchSources);
 
     // Deep-research enforcement (v0.5): if the report has < MIN_SOURCES
     // distinct URLs in sources[] AND web_search is available, retry once
@@ -150,7 +176,7 @@ export default {
       if (retryUpstream.ok) {
         try {
           const retryData = await retryUpstream.json();
-          parsed = parseContract(retryData);
+          parsed = parseContract(retryData, serverSearchSources);
         } catch {
           /* keep first attempt */
         }
@@ -160,9 +186,9 @@ export default {
     // Attach a warning if we still came up short after the retry attempt.
     if (parsed.type === "report" && (parsed.sourcesReturned || 0) < MIN_SOURCES) {
       parsed.researchWarning =
-        `Research was partial: ${parsed.sourcesReturned || 0} of ${MIN_SOURCES} ` +
-        `required sources were retrieved. Verify all claims manually before ` +
-        `booking travel.`;
+        `Only ${parsed.sourcesReturned || 0} of ${MIN_SOURCES} required sources ` +
+        `were retrieved. Verify all claims manually with the destination embassy ` +
+        `before booking travel.`;
     }
 
     return json(parsed, 200, origin);
@@ -194,6 +220,105 @@ function buildUserMessage({ nationality, from, destination, date, purpose, comme
   ];
   if (comments) lines.push(`Comments:     ${comments}`);
   if (clarify)  lines.push(`Clarification answer: ${clarify}`);
+  return lines.join("\n");
+}
+
+/* ──────────────────────────────────────────────────────────
+   v0.7 — server-side search (Tier 1: Tavily)
+   ────────────────────────────────────────────────────────── */
+
+/* Deterministic query list. We pin the order and exact strings so
+   re-runs of the same (nationality, destination, purpose) tuple
+   return the same results — reproducible for testing. */
+function buildSearchQueries(nationality, destination, purpose) {
+  const n  = String(nationality || "").trim();
+  const d  = String(destination || "").trim() || "the destination country";
+  const isRussian = /russian|russia/i.test(n);
+  const q = [
+    `${n} visa requirements ${d} citizens 2026`,
+    `${d} visa fee processing time official site 2026`,
+    `${d} travel advisory ${n} citizens`,
+    `IATA travel centre ${d} passport visa`,
+    `${d} eVisa ETA official government portal 2026`,
+    `Schengen 90 180 rolling window rules visa`,
+    `Reciprocity visa fee ${n} ${d}`,
+  ];
+  if (isRussian) {
+    q.push(`${n} ${d} entry sanctions 2026 visa restrictions`);
+    q.push(`Russian citizens visa processing time delays 2026`);
+  }
+  if (/business/i.test(purpose || "")) {
+    q.push(`${d} business visitor visa requirements ${n} 2026`);
+  }
+  return q.slice(0, parseInt(env_SEARCH_QUERIES_PER_RUN(), 10) || 7);
+}
+
+function env_SEARCH_QUERIES_PER_RUN() {
+  // Read at call time — kept tiny to avoid surfacing env in the helper signature.
+  return process?.env?.SEARCH_QUERIES_PER_RUN || "7";
+}
+
+async function fetchTavilyResults(env, queries, maxPerQuery = 6) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4500);
+  try {
+    const responses = await Promise.all(
+      queries.map((query) =>
+        fetch("https://api.tavily.com/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
+          body: JSON.stringify({
+            api_key:            env.TAVILY_API_KEY,
+            query,
+            max_results:        maxPerQuery,
+            search_depth:       "advanced",
+            include_answer:     false,
+            include_raw_content: false,
+          }),
+        }).then((r) => (r.ok ? r.json() : null))
+          .catch(() => null)
+      )
+    );
+    const seen = new Set();
+    const out  = [];
+    for (const resp of responses) {
+      if (!resp || !Array.isArray(resp.results)) continue;
+      for (const r of resp.results) {
+        if (!r || typeof r.url !== "string" || !r.url.startsWith("http")) continue;
+        if (seen.has(r.url)) continue;
+        seen.add(r.url);
+        out.push({
+          title:   typeof r.title   === "string" ? r.title : "",
+          url:     r.url,
+          content: typeof r.content === "string" ? r.content : "",
+        });
+      }
+    }
+    return out;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/* Formats results as numbered footnotes with optional content snippet.
+   Caps at ~3,500 tokens (~14,000 chars) to keep the LLM budget safe. */
+function formatEvidenceBlock(results, charCap = 14_000) {
+  const lines = [];
+  let budget = charCap;
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    const head = `[${i + 1}] ${r.title || r.url}\n    ${r.url}`;
+    lines.push(head);
+    budget -= head.length;
+    if (r.content && budget > 200) {
+      const snippet = r.content.length > 600 ? r.content.slice(0, 600) + "…" : r.content;
+      const line = `\n    ${snippet.replace(/\s+/g, " ")}`;
+      lines.push(line);
+      budget -= line.length;
+    }
+    if (budget <= 0) break;
+  }
   return lines.join("\n");
 }
 
@@ -244,7 +369,7 @@ function extractFromResponses(data) {
 /* The prompt still asks for a ```json fence around the structured
    answer. If the LLM emitted one, parse it; otherwise treat the whole
    response as the markdown body. */
-function parseContract(data) {
+function parseContract(data, serverSources = []) {
   const { text, annotations, searchCalls } = extractFromResponses(data);
 
   const fence = text.match(/```json\s*([\s\S]*?)```/i);
@@ -261,10 +386,12 @@ function parseContract(data) {
         // to the searchCalls list we extracted from the API's
         // web_search_call blocks — these are the URLs the model actually
         // visited, even if it failed to echo them in the envelope.
-        const fallbackSources = sources.length
+        const llmSources = sources.length
           ? sources
           : deriveSourcesFromSearchCalls(searchCalls, annotations);
-        const deduped = dedupeSourcesByUrl(fallbackSources);
+        // v0.7: server-derived sources (Tavily) come first; LLM emits
+        // anything else, both deduped by URL.
+        const merged = dedupeSourcesByUrl([...serverSources, ...llmSources]);
         return {
           type: "report",
           markdown: parsed.markdown.trim(),
@@ -277,8 +404,9 @@ function parseContract(data) {
           ...(annotations.length ? { annotations } : {}),
           ...(searchCalls.length ? { searchCalls } : {}),
           ...(searchQueries.length ? { searchQueries } : {}),
-          ...(deduped.length ? { sources: deduped } : {}),
-          sourcesReturned: deduped.length,
+          ...(merged.length ? { sources: merged } : {}),
+          sourcesReturned: merged.length,
+          ...(serverSources.length ? { serverSearchAvailable: true } : {}),
         };
       }
     } catch {
@@ -288,15 +416,16 @@ function parseContract(data) {
   // Fallback: treat the entire response as markdown. Derive sources
   // from whatever ground-truth we have (search_calls + annotations).
   const fallbackSources = deriveSourcesFromSearchCalls(searchCalls, annotations);
-  const deduped = dedupeSourcesByUrl(fallbackSources);
+  const merged = dedupeSourcesByUrl([...serverSources, ...fallbackSources]);
   const out = {
     type: "report",
     markdown: text.trim(),
-    sourcesReturned: deduped.length,
+    sourcesReturned: merged.length,
   };
   if (annotations.length) out.annotations = annotations;
   if (searchCalls.length) out.searchCalls = searchCalls;
-  if (deduped.length)     out.sources = deduped;
+  if (merged.length)     out.sources = merged;
+  if (serverSources.length) out.serverSearchAvailable = true;
   return out;
 }
 

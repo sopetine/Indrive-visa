@@ -1,6 +1,9 @@
 # macOS
 .DS_Store
 
+# Local secrets (never commit)
+.env
+
 # Editor
 .vscode/
 .idea/

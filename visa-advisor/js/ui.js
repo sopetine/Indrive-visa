@@ -575,11 +575,10 @@ function renderResearchWarning(message, sourcesReturned) {
   const el = document.createElement("div");
   el.className = "report-research-warning";
   el.setAttribute("role", "alert");
-  const count = Number.isFinite(sourcesReturned) ? `${sourcesReturned} of 15` : "fewer than 15";
   el.innerHTML = `
     <span class="material-symbols-outlined" aria-hidden="true">warning</span>
     <div>
-      <strong>Research was partial — ${count} required sources were retrieved.</strong>
+      <strong>Research was partial.</strong>
       ${escapeHtml(message)}
     </div>
   `;

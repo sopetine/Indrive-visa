@@ -6,6 +6,9 @@ compatibility_date = "2025-09-23"
 LLM_ENDPOINT  = "https://api.minimax.io/v1/responses"
 LLM_MODEL     = "MiniMax-M3"
 ALLOWED_ORIGIN = "https://sopetine.github.io"
+SEARCH_PROVIDER        = "tavily"
+SEARCH_QUERIES_PER_RUN = "7"
 
-# Secrets (run `wrangler secret put LLM_API_KEY`):
+# Secrets (run `wrangler secret put LLM_API_KEY` and `wrangler secret put TAVILY_API_KEY`):
 # LLM_API_KEY
+# TAVILY_API_KEY
