@@ -280,8 +280,11 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
   }
 
   // "Before you book" numbered checklist (critical types drive color)
+  // v0.7.2 — pass server-matched fact snippets so each ↗ Verify link
+  // has an inline "Grounded in: <domain>" snippet under the value.
+  const factMatches = Array.isArray(research?.factMatches) ? research.factMatches : [];
   if (crit.length) {
-    body.appendChild(renderBeforeYouBook(crit, sections, ann));
+    body.appendChild(renderBeforeYouBook(crit, sections, ann, factMatches));
   }
 
   // Required documents — bullets get per-source verify links
@@ -745,11 +748,18 @@ function renderResearchMetaLine({ queries, citedSources, sources, inlineCitation
   return `Research: ${parts.join(" · ")}`;
 }
 
-function renderBeforeYouBook(critical, sections, annotations) {
+function renderBeforeYouBook(critical, sections, annotations, factMatches = []) {
   const wrap = document.createElement("aside");
   wrap.className = "before-you-book";
   wrap.setAttribute("role", "region");
   wrap.setAttribute("aria-labelledby", "before-you-book-title");
+
+  // v0.7.2 (L5) — look up server-matched snippet per fact for the
+  // "Grounded in" quote line under each Verify link.
+  const matchByLabel = {};
+  for (const m of factMatches) {
+    if (m && m.label) matchByLabel[m.label] = m;
+  }
 
   const items = critical.map((c, i) => {
     const type = c.type && CRITICAL_TYPE_META[c.type] ? c.type : "";
@@ -763,6 +773,15 @@ function renderBeforeYouBook(critical, sections, annotations) {
     const verify = lookupUrl
       ? `<a class="critical-step-verify" href="${escapeAttr(lookupUrl)}" target="_blank" rel="noopener noreferrer" data-snippet="${escapeAttr(`Step ${i + 1}: ${c.label || ""}`)}">↗ Verify</a>`
       : "";
+    // Server-side match: short snippet + small "grounded in: domain" line
+    // under the value, so the user sees *why* the fact is cited from that URL.
+    const fm = matchByLabel[c.label];
+    const grounded = fm
+      ? `<div class="critical-step-grounded">
+           <span class="critical-step-grounded-label">Grounded in <code>${escapeHtml(extractHostname(fm.matchedUrl))}</code>:</span>
+           <blockquote class="critical-step-snippet">${escapeHtml(fm.snippet)}</blockquote>
+         </div>`
+      : "";
     const cls = type ? `critical-step critical-step--${type}` : "critical-step";
     return `
       <li class="${cls}" data-critical-type="${type}">
@@ -773,6 +792,7 @@ function renderBeforeYouBook(critical, sections, annotations) {
         <div class="critical-step-body">
           <div class="critical-step-label">${label}</div>
           ${value ? `<div class="critical-step-value">${value}</div>` : ""}
+          ${grounded}
         </div>
         ${verify}
       </li>
@@ -786,10 +806,20 @@ function renderBeforeYouBook(critical, sections, annotations) {
     </h2>
     <p class="before-you-book-intro">
       Confirm each item below before paying for non-refundable travel.
+      Each step's <em>Grounded in</em> quote shows the exact Tavily snippet the
+      Worker matched against the claim; click <em>↗ Verify</em> to read it in context.
     </p>
     <ol class="before-you-book-list">${items}</ol>
   `;
   return wrap;
+}
+
+function extractHostname(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url.slice(0, 32);
+  }
 }
 
 function renderDocsSection(md, rawTitle, annotations, fullMarkdown) {
@@ -1320,7 +1350,9 @@ export function initReportView({ onEdit }) {
         searchQueries: Array.isArray(data.searchQueries) ? data.searchQueries : [],
         sources:       Array.isArray(data.sources)       ? data.sources       : [],
         sourcesReturned: Number.isFinite(data.sourcesReturned) ? data.sourcesReturned : 0,
-        researchWarning: typeof data.researchWarning === "string" ? data.researchWarning : "",
+        researchWarning:    typeof data.researchWarning    === "string" ? data.researchWarning    : "",
+        serverSearchAvailable: data.serverSearchAvailable === true,
+        factMatches:    Array.isArray(data.factMatches) ? data.factMatches : [],
       };
       renderReport(
         root.body,

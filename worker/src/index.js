@@ -72,21 +72,28 @@ export default {
       return json({ error: "Server is missing LLM configuration" }, 500, origin);
     }
 
-    const userMessage = buildUserMessage({ nationality, from, destination, date, purpose, comments, clarify });
+    let userMessage = buildUserMessage({ nationality, from, destination, date, purpose, comments, clarify });
 
     /* v0.7 — server-side deterministic search via Tavily (Tier 1).
        Runs IN PARALLEL with the first upstream call below so latency
        isn't stacked. When enabled, serverSearchSources becomes the
        authoritative primary source set; LLM-emitted sources merge in
        only to fill gaps. When the key is missing or Tavily fails,
-       falls through silently to the existing LLM-only path. */
+       falls through silently to the existing LLM-only path.
+
+       v0.7.2 (L5): also keep the full `tavilyRawResults` array (with
+       content snippets) so parseContract can server-side match each
+       critical fact against a Tavily snippet and override c.source
+       with the deterministically matched URL. */
     let serverSearchSources = [];
+    let tavilyRawResults = [];
     let evidenceBlock = "";
     if (env.TAVILY_API_KEY && (env.SEARCH_PROVIDER || "") === "tavily") {
-      const queries = buildSearchQueries(nationality, destination, purpose, from);
+      const queries = buildSearchQueries(env, nationality, destination, purpose, from);
       try {
         const results = await fetchTavilyResults(env, queries);
         if (results.length) {
+          tavilyRawResults = results;
           serverSearchSources = results.map((r) => ({
             title:  r.title || "",
             url:    r.url,
@@ -152,14 +159,18 @@ export default {
       return json({ error: "Upstream returned non-JSON" }, 502, origin);
     }
 
-    let parsed = parseContract(data, serverSearchSources);
+    let parsed = parseContract(data, serverSearchSources, tavilyRawResults);
 
     // Deep-research enforcement (v0.5): if the report has < MIN_SOURCES
     // distinct URLs in sources[] AND web_search is available, retry once
     // with an explicit "do more searches" reminder appended to the user
     // message. Cap retries at 1 to bound latency.
+    // v0.7.2 (L7): skip the retry path entirely when Tier 1 server search
+    // already returned authoritative sources — the LLM-only retry prompt
+    // is moot.
     if (
       webSearchAvailable &&
+      !serverSearchSources.length &&
       parsed.type === "report" &&
       (parsed.sourcesReturned || 0) < MIN_SOURCES
     ) {
@@ -176,7 +187,7 @@ export default {
       if (retryUpstream.ok) {
         try {
           const retryData = await retryUpstream.json();
-          parsed = parseContract(retryData, serverSearchSources);
+          parsed = parseContract(retryData, serverSearchSources, tavilyRawResults);
         } catch {
           /* keep first attempt */
         }
@@ -184,7 +195,13 @@ export default {
     }
 
     // Attach a warning if we still came up short after the retry attempt.
-    if (parsed.type === "report" && (parsed.sourcesReturned || 0) < MIN_SOURCES) {
+    // v0.7.2 (L7): when Tier 1 server search ran, sources are server-validated
+    // so the legacy "≥15 sources" floor no longer applies — skip the warning.
+    if (
+      parsed.type === "report" &&
+      (parsed.sourcesReturned || 0) < MIN_SOURCES &&
+      !serverSearchSources.length
+    ) {
       parsed.researchWarning =
         `Only ${parsed.sourcesReturned || 0} of ${MIN_SOURCES} required sources ` +
         `were retrieved. Verify all claims manually with the destination embassy ` +
@@ -230,7 +247,7 @@ function buildUserMessage({ nationality, from, destination, date, purpose, comme
 /* Deterministic query list. We pin the order and exact strings so
    re-runs of the same (nationality, destination, purpose) tuple
    return the same results — reproducible for testing. */
-function buildSearchQueries(nationality, destination, purpose) {
+function buildSearchQueries(env, nationality, destination, purpose, from) {
   const n  = String(nationality || "").trim();
   const d  = String(destination || "").trim() || "the destination country";
   const isRussian = /russian|russia/i.test(n);
@@ -250,12 +267,8 @@ function buildSearchQueries(nationality, destination, purpose) {
   if (/business/i.test(purpose || "")) {
     q.push(`${d} business visitor visa requirements ${n} 2026`);
   }
-  return q.slice(0, parseInt(env_SEARCH_QUERIES_PER_RUN(), 10) || 7);
-}
-
-function env_SEARCH_QUERIES_PER_RUN() {
-  // Read at call time — kept tiny to avoid surfacing env in the helper signature.
-  return process?.env?.SEARCH_QUERIES_PER_RUN || "7";
+  const cap = parseInt((env && env.SEARCH_QUERIES_PER_RUN) || "7", 10) || 7;
+  return q.slice(0, cap);
 }
 
 async function fetchTavilyResults(env, queries, maxPerQuery = 6) {
@@ -369,7 +382,7 @@ function extractFromResponses(data) {
 /* The prompt still asks for a ```json fence around the structured
    answer. If the LLM emitted one, parse it; otherwise treat the whole
    response as the markdown body. */
-function parseContract(data, serverSources = []) {
+function parseContract(data, serverSources = [], tavilyResults = []) {
   const { text, annotations, searchCalls } = extractFromResponses(data);
 
   const fence = text.match(/```json\s*([\s\S]*?)```/i);
@@ -392,15 +405,33 @@ function parseContract(data, serverSources = []) {
         // v0.7: server-derived sources (Tavily) come first; LLM emits
         // anything else, both deduped by URL.
         const merged = dedupeSourcesByUrl([...serverSources, ...llmSources]);
+
+        // v0.7.2 (L5): match each critical fact against Tavily snippets.
+        // For matches above threshold, override critical[i].source with
+        // the matched URL (existing UI ↗ Verify links at ui.js:684-688
+        // automatically pick this up) and surface factMatches[] so the
+        // UI can render the snippet+score next to each fact.
+        let cleanCrit = sanitiseCritical(parsed.critical);
+        let factMatches = [];
+        if (Array.isArray(cleanCrit) && cleanCrit.length && tavilyResults.length) {
+          const overrides = matchCriticalFactsToTavilyResults(cleanCrit, tavilyResults);
+          factMatches = overrides.matches;
+          for (const c of cleanCrit) {
+            const m = overrides.byLabel[c.label];
+            if (m) c.source = m.url;
+          }
+        }
+
         return {
           type: "report",
           markdown: parsed.markdown.trim(),
           ...(typeof parsed.caveats === "string" && parsed.caveats.trim()
             ? { caveats: parsed.caveats.trim() }
             : {}),
-          ...(Array.isArray(parsed.critical) && parsed.critical.length
-            ? { critical: sanitiseCritical(parsed.critical) }
+          ...(Array.isArray(cleanCrit) && cleanCrit.length
+            ? { critical: cleanCrit }
             : {}),
+          ...(factMatches.length ? { factMatches } : {}),
           ...(annotations.length ? { annotations } : {}),
           ...(searchCalls.length ? { searchCalls } : {}),
           ...(searchQueries.length ? { searchQueries } : {}),
@@ -520,6 +551,73 @@ function sanitiseCritical(raw) {
     });
   }
   return out;
+}
+
+/* v0.7.2 (L5) — match each Before-you-book fact (Fee / Processing time /
+   Required document / Travel advisory) to the best-matching Tavily
+   snippet by token overlap. Score = |factTokens ∩ contentTokens| /
+   |factTokens|, lower-cased, stopwords removed.
+
+   Returns { matches: [...], byLabel: { [label]: {url, score, snippet, title} } }.
+   Matches below MATCH_THRESHOLD are dropped — caller falls back to
+   the LLM-emitted c.source for that fact. */
+const FACT_STOPWORDS = new Set([
+  "the","a","an","of","to","in","for","and","or","on","at","by","with",
+  "is","are","was","were","be","been","being","have","has","had","do",
+  "does","did","but","if","or","as","than","so","that","this","these",
+  "those","it","its","you","your","we","our","they","their","from",
+]);
+function tokenize(text) {
+  if (!text) return [];
+  return String(text)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .filter((t) => t.length > 1 && !FACT_STOPWORDS.has(t));
+}
+function matchCriticalFactsToTavilyResults(critical, tavilyResults) {
+  const MATCH_THRESHOLD = 0.18;
+  const matches = [];
+  const byLabel = {};
+  for (const c of critical) {
+    if (!c || !c.label) continue;
+    const factTokens = tokenize(`${c.label} ${c.value || ""}`);
+    if (!factTokens.length) continue;
+    const factSet = new Set(factTokens);
+    let best = null;
+    for (const r of tavilyResults) {
+      if (!r || !r.url || !r.content) continue;
+      const contentTokens = tokenize(r.content);
+      if (!contentTokens.length) continue;
+      let hits = 0;
+      for (const t of contentTokens) {
+        if (factSet.has(t)) hits++;
+      }
+      const score = hits / factTokens.length;
+      if (score >= MATCH_THRESHOLD && (!best || score > best.score)) {
+        best = {
+          url:     r.url,
+          title:   r.title || r.url,
+          snippet: (r.content || "").slice(0, 320),
+          score:   Number(score.toFixed(3)),
+        };
+      }
+    }
+    if (best) {
+      byLabel[c.label] = best;
+      matches.push({
+        label:    c.label,
+        value:    c.value || "",
+        matchedUrl:   best.url,
+        matchedTitle: best.title,
+        snippet:  best.snippet,
+        score:    best.score,
+        originalSource: c.source || "",
+      });
+    }
+  }
+  return { matches, byLabel };
 }
 
 function corsHeaders(origin) {
