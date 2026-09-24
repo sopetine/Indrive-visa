@@ -10,7 +10,7 @@
   justify-content: center;
   height: 44px;
   padding: 0 20px;
-  border-radius: 10px;
+  border-radius: 9999px;
   font-family: var(--font-family-body);
   font-size: var(--fs-s);
   font-weight: var(--fw-semibold);
@@ -98,12 +98,13 @@
 /* Sizing variants */
 .btn--sm {
   height: 36px;
-  padding: 0 12px;
+  padding: 0 14px;
   font-size: 13px;
+  border-width: 2px;
 }
 .btn--lg {
-  height: 56px;
-  padding: 0 28px;
+  height: 52px;
+  padding: 0 24px;
   font-size: var(--fs-m);
 }
 
