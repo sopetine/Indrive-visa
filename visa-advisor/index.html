@@ -53,19 +53,13 @@
     <section class="view view--form" data-view="form" aria-labelledby="form-title">
       <div class="container container--narrow">
         <header class="form-intro">
-          <div class="form-intro-media" aria-hidden="true">
-            <img src="images/hero-visa.jpg" alt="" class="form-intro-art">
-          </div>
-          <div class="form-intro-copy">
-            <span class="badge form-intro-badge">Free · No signup</span>
-            <h1 id="form-title">
-              Visa requirements,<br>
-              <mark class="hl">in seconds.</mark>
-            </h1>
-            <p class="form-subtitle form-subtitle--sm">
-              Enter your passport, where you're based, and where you're going. Get the visa status, allowed stay, fees, processing time, and required documents — researched live from Wikipedia, IATA, and official <code>.gov</code> sites. Every bullet links back to its verified source.
-            </p>
-          </div>
+          <h1 id="form-title">
+            Visa requirements,<br>
+            <mark class="hl">in seconds.</mark>
+          </h1>
+          <p class="form-subtitle form-subtitle--sm">
+            Enter your passport, where you're based, and where you're going. Get the visa status, allowed stay, fees, processing time, and required documents — researched live from Wikipedia, IATA, and official <code>.gov</code> sites. Every bullet links back to its verified source.
+          </p>
         </header>
 
         <div class="view-pill" data-view-pill hidden>
@@ -165,38 +159,40 @@
 
         <!-- Sticky action bar -->
         <div class="action-bar" data-action-bar>
-          <div class="action-bar-row">
-            <div class="action-bar-route">
-              <span class="route-chip" data-report-from>—</span>
-              <span class="material-symbols-outlined route-arrow">arrow_forward</span>
-              <span class="route-chip route-chip--alt" data-report-to>—</span>
+          <div class="action-bar-inner">
+            <div class="action-bar-row">
+              <div class="action-bar-route">
+                <span class="route-chip" data-report-from>—</span>
+                <span class="material-symbols-outlined route-arrow">arrow_forward</span>
+                <span class="route-chip route-chip--alt" data-report-to>—</span>
+              </div>
+              <div class="action-bar-buttons">
+                <button type="button" class="btn btn--outline btn--sm" data-action="edit">
+                  <span class="material-symbols-outlined btn-icon">edit</span>
+                  Edit
+                </button>
+                <button type="button" class="btn btn--outline btn--sm" data-action="copy">
+                  <span class="material-symbols-outlined btn-icon">content_copy</span>
+                  Copy
+                </button>
+                <button type="button" class="btn btn--primary btn--sm" data-action="share">
+                  <span class="material-symbols-outlined btn-icon">share</span>
+                  Share
+                </button>
+              </div>
             </div>
-            <div class="action-bar-buttons">
-              <button type="button" class="btn btn--outline btn--sm" data-action="edit">
-                <span class="material-symbols-outlined btn-icon">edit</span>
-                Edit
-              </button>
-              <button type="button" class="btn btn--outline btn--sm" data-action="copy">
-                <span class="material-symbols-outlined btn-icon">content_copy</span>
-                Copy
-              </button>
-              <button type="button" class="btn btn--primary btn--sm" data-action="share">
-                <span class="material-symbols-outlined btn-icon">share</span>
-                Share
-              </button>
-            </div>
-          </div>
-          <div class="action-bar-progress" data-action-bar-progress hidden aria-hidden="true">
-            <div class="action-bar-progress-live" data-progress-label aria-live="polite">
-              Researching your route…
-            </div>
-            <div class="action-bar-progress-row">
-              <span class="action-bar-progress-step is-active" data-progress-step="prompt">Loading advisor knowledge base</span>
-              <span class="action-bar-progress-step" data-progress-step="consult">Consulting sources via web search</span>
-              <span class="action-bar-progress-step" data-progress-step="compile">Compiling report</span>
-            </div>
-            <div class="action-bar-progress-track">
-              <span class="action-bar-progress-fill" data-action-bar-progress-fill></span>
+            <div class="action-bar-progress" data-action-bar-progress hidden aria-hidden="true">
+              <div class="action-bar-progress-live" data-progress-label aria-live="polite">
+                Researching your route…
+              </div>
+              <div class="action-bar-progress-row">
+                <span class="action-bar-progress-step is-active" data-progress-step="prompt">Loading advisor knowledge base</span>
+                <span class="action-bar-progress-step" data-progress-step="consult">Consulting sources via web search</span>
+                <span class="action-bar-progress-step" data-progress-step="compile">Compiling report</span>
+              </div>
+              <div class="action-bar-progress-track">
+                <span class="action-bar-progress-fill" data-action-bar-progress-fill></span>
+              </div>
             </div>
           </div>
         </div>

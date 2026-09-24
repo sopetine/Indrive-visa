@@ -60,6 +60,9 @@ function start() {
   function showReport(params = {}) {
     document.querySelector('[data-view="form"]').hidden = true;
     reportApi.el.hidden = false;
+    // Hide any previously-rendered report state immediately so stale
+    // content never lingers while this route decides what to show next.
+    reportApi.show("loading");
 
     // Migration shim: legacy URLs use ?arr= (old "arrival" field), legacy
     // localStorage payloads use { arrival }. Map both to `from`.
