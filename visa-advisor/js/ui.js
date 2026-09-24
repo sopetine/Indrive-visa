@@ -222,6 +222,7 @@ const STATUS_CLASS = {
   "visa on arrival": "status-badge--voa",
   "embassy / consulate visa required": "status-badge--embassy",
   "admission restricted / banned": "status-badge--restricted",
+  "undefined": "status-badge--undefined",
 };
 const STATUS_TONE = {
   "visa-free": "visa-free",
@@ -230,6 +231,7 @@ const STATUS_TONE = {
   "visa on arrival": "voa",
   "embassy / consulate visa required": "embassy",
   "admission restricted / banned": "restricted",
+  "undefined": "undefined",
 };
 const STATUS_ICON = {
   "visa-free": "check_circle",
@@ -238,6 +240,7 @@ const STATUS_ICON = {
   "visa on arrival": "badge",
   "embassy / consulate visa required": "account_balance",
   "admission restricted / banned": "block",
+  "undefined": "help",
 };
 
 /* Critical-type → icon + Material Symbol + tone. */
@@ -787,7 +790,7 @@ function renderStatus(status, stay) {
   wrap.setAttribute("aria-labelledby", "report-status-title");
 
   const normalized = status.trim().toLowerCase();
-  const key = Object.keys(STATUS_CLASS).find(k => normalized.includes(k)) || "embassy";
+  const key = Object.keys(STATUS_CLASS).find(k => k !== "undefined" && normalized.includes(k)) || "undefined";
   const cls = STATUS_CLASS[key];
   const tone = STATUS_TONE[key];
   const glyph = STATUS_ICON[key];
@@ -796,7 +799,7 @@ function renderStatus(status, stay) {
   wrap.innerHTML = `
     <span class="status-badge ${cls}" id="report-status-title" role="status">
       <span class="icon-chip icon-chip--${tone}" aria-hidden="true"><span class="material-symbols-outlined">${glyph}</span></span>
-      <span>${hl(status.trim())}</span>
+      <span>${hl(stripCriticalPrefix(status.trim()))}</span>
     </span>
     ${stay && stay !== "N/A" ? `
       <div class="status-stay">
@@ -1090,7 +1093,7 @@ function renderBeforeYouBook(critical, sections, annotations) {
     const source = (c.source || "").trim();
     const lookupUrl = source && /^https?:\/\//.test(source) ? source : "";
     const verify = lookupUrl
-      ? `<a class="critical-step-verify" href="${escapeAttr(lookupUrl)}" target="_blank" rel="noopener noreferrer" data-snippet="${escapeAttr(`Step ${i + 1}: ${c.label || ""}`)}">↗ Verify</a>`
+      ? `<a class="critical-step-verify" href="${escapeAttr(lookupUrl)}" target="_blank" rel="noopener noreferrer" data-snippet="${escapeAttr(`Step ${i + 1}: ${c.label || ""}`)}">Verify</a>`
       : "";
     const cls = type ? `critical-step critical-step--${type}` : "critical-step";
     return `
@@ -1215,7 +1218,7 @@ function renderVerifyLinks(annotations) {
     link.dataset.snippet = a.snippet || "";
     link.dataset.verified = a.snippet ? "1" : "0";
     link.setAttribute("aria-describedby", "cite-tooltip-singleton");
-    link.textContent = `↗ Verify on ${a.title || "source"}`;
+    link.textContent = `Verify on ${a.title || "source"}`;
     wrap.appendChild(link);
   });
   return wrap;
@@ -1630,8 +1633,8 @@ export function initReportView({ onEdit }) {
   function setRoute(fromCode, toCode, destinationCode) {
     const from = findByCode(fromCode);
     const to   = findByCode(toCode);
-    root.from.textContent = from ? `${from.flag} ${from.code}` : (fromCode || "—");
-    root.to.textContent   = to   ? `${to.flag} ${to.code}`     : (toCode || "—");
+    root.from.textContent = from ? from.code : (fromCode || "—");
+    root.to.textContent   = to   ? to.code   : (toCode || "—");
     if (destinationCode) {
       root.to.textContent += `  /  ${destinationCode}`;
     }
