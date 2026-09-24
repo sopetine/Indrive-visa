@@ -11,22 +11,25 @@
 A user enters free-form text:
 
 - **Nationality** (their passport) — e.g. "Russian", "American"
-- **Arrival** (country) — e.g. "Georgia", "Turkey"
+- **From** (country they're currently based in / where they'll apply from) — e.g. "Georgia", "Turkey"
 - **Destination** (city) — e.g. "Tbilisi", "Istanbul"
 - **Comments** (optional) — e.g. dual citizenship, layover, diplomatic passport
 
-The app auto-fills the arrival date (today) and trip purpose (business) so the form stays tight. The LLM gets the optional free-form comments for context.
+The app auto-fills the arrival date (today) and trip purpose (business) so the form stays tight. The LLM gets the optional free-form comments for context. The `From` field tells the advisor where to apply (e.g. for Schengen, consulate jurisdiction = country of legal residence).
 
 The app returns a structured report:
 
 - Visa status (visa-free / eTA / eVisa / VOA / embassy / restricted)
 - Allowed stay, passport-validity rule, fee, processing time
-- Required documents
+- Required documents — **each bullet has a "Verify on {source}" link to the URL the LLM actually read**
 - Official application link (only `.gov` / official)
-- Exception rules, travel advisories (collapsible)
-- Sources (Wikipedia, IATA, official sites)
+- Exception rules, travel advisories (collapsible, with verify links)
+- **"Before you book" numbered checklist** — color-coded by critical type (money / deadline / entry / doc / stale), each step links to its source
+- Sources (live from web search)
 - ⚠️ Caveats callout when applicable
 - Disclaimer (always last)
+
+Research is **live**, not from the LLM's training data: the Worker calls the OpenAI Responses API (`/v1/responses`) with the server-side `web_search` tool. MiniMax M3 actually fetches Wikipedia, IATA Travel Centre, and the destination's official `.gov` site, and attaches a `url_citation` annotation to every grounded claim. The UI maps those annotations to bullet character ranges and appends a hover-tooltip verify link to each one. Each query takes ~30–90 seconds.
 
 See [`visa-advisor-functional-spec.md`](./visa-advisor-functional-spec.md) for the full functional spec and [`visa-advisor-prompt.md`](./visa-advisor-prompt.md) for the system prompt you should send to the LLM.
 
@@ -124,10 +127,12 @@ Built on top of the inDrive a11y baseline (skip link, `:focus-visible` rings, `p
 ## How it works
 
 ```
-Browser (GitHub Pages)            Cloudflare Worker (proxy)              LLM API
+Browser (GitHub Pages)            Cloudflare Worker (proxy)              MiniMax API
 ─────────────────────             ─────────────────────────              ────────────
-visa-advisor/js/api.js ─POST───→ worker/src/index.js ───Bearer───→ /v1/chat/completions
-              ←JSON── { markdown, caveats? }  ←tokens────  minimax/MiniMax-M3
+visa-advisor/js/api.js ─POST───→ worker/src/index.js ───Bearer───→ /v1/responses
+              ←JSON── { markdown, caveats?, critical[], annotations[] }
+                                            ←tools: [{ type: 'web_search' }]
+                                            ←annotations: span-level url_citations
         │
         └─fetch (cached)─→ visa-advisor/visa-advisor-prompt.md
 ```
@@ -151,8 +156,16 @@ The system prompt instructs the LLM to wrap its answer in a ```json fence (see �
 ```json
 {
   "type": "report",
-  "markdown": "### Visa status\nVisa-free\n\n### Allowed stay\n...",
-  "caveats": "Optional short string for the ⚠️ callout"
+  "markdown":  "### Visa status\nVisa-free\n\n### 🚨 [MONEY] Fee\n~90 EUR\n\n### Required documents (typical)\n- Valid passport\n- Completed application form\n...",
+  "caveats":   "Optional 1–3 sentences for the ⚠️ callout",
+  "critical":  [
+    { "label": "Fee",             "value": "~90 EUR",                                     "source": "[1][3]", "type": "money"    },
+    { "label": "Processing time", "value": "15–45 calendar days",                         "source": "[3]",    "type": "deadline" }
+  ],
+  "annotations": [
+    { "title": "Wikipedia — Visa policy of Romania",          "url": "https://en.wikipedia.org/wiki/Visa_policy_of_Romania",                 "start": 42,  "end": 87,  "snippet": "may enter Romania visa-free for a maximum of 90 days within any 180-day period" },
+    { "title": "EU Schengen Visa Policy",                     "url": "https://home-affairs.ec.europa.eu/policies/schengen/visa-policy_en",  "start": 120, "end": 165, "snippet": "The standard Schengen visa fee is 90 EUR" }
+  ]
 }
 ```
 
@@ -162,7 +175,7 @@ The system prompt instructs the LLM to wrap its answer in a ```json fence (see �
 { "type": "clarify", "question": "Which passport will you travel on?" }
 ```
 
-The `markdown` field follows the section order in §2 of the prompt. The UI in `js/ui.js → renderReport()` parses it; the disclaimer is appended automatically.
+The `markdown` field follows the section order in §2 of the prompt with `🚨 [TYPE]` prefixes on critical sections. The `critical[]` array drives the color-coded "Before you book" numbered checklist at the top of the report. The `annotations[]` array is the ground-truth provenance — each entry is a span-level `url_citation` returned by the API for one grounded claim (the LLM actually visited the URL via the `web_search` tool). The UI maps these annotations to bullet character ranges and appends a "Verify on {source}" hover-tooltip link to each bullet. Empty `annotations[]` triggers an "unverified" banner at the top.
 
 ## Local development
 
@@ -247,5 +260,5 @@ Not in MVP, intentionally:
 
 - **Design language** — derived from the [inDrive.com](https://indrive.com/) styleguide (interior DS).
 - **Countries dataset** — curated subset; full list from [imorte/passport-index-data](https://github.com/imorte/passport-index-data) (MIT).
-- **System prompt** — see [`visa-advisor-prompt.md`](./visa-advisor-prompt.md), sourced from the same spec.
+- **System prompt** — see [`visa-advisor-prompt.md`](./visa-advisor-prompt.md) (v0.4 — mandates server-side `web_search` for live research, typed `[MONEY]/[DEADLINE]/[ENTRY]/[DOC]/[STALE]` critical markers), sourced from the same spec.
 - **Disclaimer** — text matches the prompt's `§8f` disclaimer template.

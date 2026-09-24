@@ -1,8 +1,12 @@
 /* ============================================================
    UI — form, validation, modal, report rendering
+   v0.4 — span-annotation renderer, "Before you book" checklist,
+   per-bullet verify links, typed critical markers.
+
+   Form: Nationality + From (where you're based) + Destination (city)
    ============================================================ */
 
-import { SANCTIONED, findByCode } from "./countries.js";
+import { findByCode } from "./countries.js";
 import { queryAdvisor } from "./api.js";
 
 /* ──────────────────────────────────────────────────────────
@@ -40,32 +44,37 @@ export function initModal() {
 }
 
 /* ──────────────────────────────────────────────────────────
-   FORM — validation, submission, sanctioned-destination check
+   FORM — Nationality + From + Destination (+ optional Comments)
    ────────────────────────────────────────────────────────── */
 
 export function initForm({ onSubmit }) {
   const form         = document.querySelector("[data-form]");
   const submitBtn    = form.querySelector("[data-submit]");
   const nationalityEl= form.querySelector("#input-nationality");
-  const arrivalEl    = form.querySelector("#input-arrival");
+  const fromEl       = form.querySelector("#input-from");
   const destinationEl= form.querySelector("#input-destination");
   const commentsEl   = form.querySelector("#input-comments");
   const sanctionedUI = form.querySelector("[data-notice=sanctioned]");
   const pillEl       = document.querySelector("[data-view-pill]");
   const pillRouteEl  = document.querySelector("[data-pill-route]");
 
-  // Hydrate the "Back to last report" pill from localStorage.
-  // Hydrate form fields too if a previous nationality is saved.
+  // Hydrate the "Back to last report" pill + the nationality field from
+  // localStorage. Migration shim: legacy shape { arrival } → { from }.
   let cachedInput = null;
   try {
     const raw = localStorage.getItem("visa-advisor.last-input");
-    if (raw) cachedInput = JSON.parse(raw);
+    if (raw) {
+      cachedInput = JSON.parse(raw);
+      if (cachedInput && !cachedInput.from && cachedInput.arrival) {
+        cachedInput.from = cachedInput.arrival;
+      }
+    }
   } catch { /* ignore parse errors */ }
   if (cachedInput && cachedInput.nationality) {
     nationalityEl.value = cachedInput.nationality;
   }
   if (cachedInput && pillEl && pillRouteEl) {
-    const route = [cachedInput.nationality, cachedInput.destination || cachedInput.arrival]
+    const route = [cachedInput.nationality, cachedInput.destination || cachedInput.from]
       .filter(Boolean).join(" → ");
     if (route) {
       pillRouteEl.textContent = route;
@@ -79,7 +88,6 @@ export function initForm({ onSubmit }) {
     }
   }
 
-  // Field-level error helpers
   function setError(field, msg) {
     const el = form.querySelector(`[data-error-for="${field}"]`);
     el.textContent = msg;
@@ -103,44 +111,33 @@ export function initForm({ onSubmit }) {
   function validate() {
     clearErrors();
     const nat = readField(nationalityEl);
-    const arr = readField(arrivalEl);
+    const fr  = readField(fromEl);
     const dst = readField(destinationEl);
     let ok = true;
 
     if (!nat) { setError("nationality", "Enter your nationality"); ok = false; }
-    if (!arr) { setError("arrival",     "Enter an arrival country"); ok = false; }
-    if (!dst) { setError("destination", "Enter a destination city"); ok = false; }
-    if (nat && arr && nat.toLowerCase() === arr.toLowerCase()) {
-      setError("arrival", "Arrival can't match your nationality");
-      ok = false;
-    }
+    if (!fr)  { setError("from",        "Enter where you're based");  ok = false; }
+    if (!dst) { setError("destination", "Enter a destination city");  ok = false; }
 
-    // Sanctioned jurisdiction (per spec §3.2) — check arrival text against ISO codes
-    const arrUpper = arr.toUpperCase();
-    const sanctioned = SANCTIONED.has(arrUpper) ||
-      (arr.length === 2 && SANCTIONED.has(arrUpper));
-    sanctionedUI.hidden = !sanctioned;
-    if (sanctioned) ok = false;
+    // We do NOT block nationality == from. A Russian citizen CAN be based
+    // in Russia; that's a legitimate query ("am I OK to fly domestic?").
+    // Sanctioned-destination detection moved to the LLM (it knows the
+    // country inferred from the destination city). The frontend sanctioned
+    // notice is hidden by default; the LLM emits it via caveats when needed.
+    sanctionedUI.hidden = true;
 
     submitBtn.disabled = !ok;
     return ok;
   }
 
-  // Errors are surfaced only on submit attempt (and not while typing).
-  // We still need to keep the submit button's enabled state in sync as the
-  // user types — so a lightweight listener just recomputes `disabled`
-  // without showing error messages. Full error UI runs only on submit.
-  // We listen for both `input` (real typing) and `change` (programmatic
-  // value sets that don't fire `input`, e.g. some assistive tech and the
-  // browser's password-manager autofill).
   function refreshSubmitState() {
     const ok =
       !!readField(nationalityEl) &&
-      !!readField(arrivalEl) &&
+      !!readField(fromEl) &&
       !!readField(destinationEl);
     submitBtn.disabled = !ok;
   }
-  [nationalityEl, arrivalEl, destinationEl].forEach((el) => {
+  [nationalityEl, fromEl, destinationEl].forEach((el) => {
     el.addEventListener("input",  refreshSubmitState);
     el.addEventListener("change", refreshSubmitState);
   });
@@ -151,15 +148,13 @@ export function initForm({ onSubmit }) {
 
     const input = {
       nationality: readField(nationalityEl),
-      arrival:     readField(arrivalEl),
+      from:        readField(fromEl),
       destination: readField(destinationEl),
       date:        new Date().toISOString().slice(0, 10),
       purpose:     "business",
       comments:    readField(commentsEl),
     };
 
-    // Remember the full last-input so the "Back to last report" pill
-    // (and the implicit Edit→Resubmit path) survive a tab refresh.
     try {
       localStorage.setItem("visa-advisor.last-input", JSON.stringify(input));
     } catch { /* quota or privacy mode — ignore */ }
@@ -167,16 +162,14 @@ export function initForm({ onSubmit }) {
     onSubmit(input);
   });
 
-  // initial pass — set the submit button state without surfacing errors.
-  // Errors are only shown after the user attempts to submit.
   clearErrors();
-  submitBtn.disabled = !readField(nationalityEl) || !readField(arrivalEl) || !readField(destinationEl);
+  submitBtn.disabled = !readField(nationalityEl) || !readField(fromEl) || !readField(destinationEl);
 
   return {
     getFormData() {
       return {
         nationality: readField(nationalityEl),
-        arrival:     readField(arrivalEl),
+        from:        readField(fromEl),
         destination: readField(destinationEl),
         date:        new Date().toISOString().slice(0, 10),
         purpose:     "business",
@@ -185,16 +178,16 @@ export function initForm({ onSubmit }) {
     },
     setFormData(data) {
       if (data.nationality) nationalityEl.value = data.nationality;
-      if (data.arrival)     arrivalEl.value     = data.arrival;
+      if (data.from)        fromEl.value        = data.from;
       if (data.destination) destinationEl.value = data.destination;
-      if (data.comments)    commentsEl.value   = data.comments;
+      if (data.comments)    commentsEl.value    = data.comments;
       refreshSubmitState();
     },
   };
 }
 
 /* ──────────────────────────────────────────────────────────
-   REPORT — markdown-to-structured-sections renderer
+   v0.4 REPORT RENDERER
    ────────────────────────────────────────────────────────── */
 
 const STATUS_CLASS = {
@@ -205,7 +198,6 @@ const STATUS_CLASS = {
   "embassy / consulate visa required": "status-badge--embassy",
   "admission restricted / banned": "status-badge--restricted",
 };
-
 const STATUS_TONE = {
   "visa-free": "visa-free",
   "eta required": "eta",
@@ -214,7 +206,6 @@ const STATUS_TONE = {
   "embassy / consulate visa required": "embassy",
   "admission restricted / banned": "restricted",
 };
-
 const STATUS_ICON = {
   "visa-free": "check_circle",
   "eta required": "flight",
@@ -224,81 +215,91 @@ const STATUS_ICON = {
   "admission restricted / banned": "block",
 };
 
-/* Material Symbols (webfont) — single source of truth for the rich icon set. */
-const ICONS = {
-  docs:     "article",
-  passport: "contact_page",
-  fee:      "credit_card",
-  time:     "schedule",
-  shield:   "shield",
-  rule:     "rule",
-  campaign: "campaign",
-  warn:     "warning_amber",
-  info:     "info",
-  external: "arrow_outward",
-  refresh:  "refresh",
-  help:     "help",
-  send:     "send",
+/* Critical-type → icon + Material Symbol + tone. */
+const CRITICAL_TYPE_META = {
+  money:    { icon: "attach_money",       tone: "money"    },
+  deadline: { icon: "schedule",           tone: "deadline" },
+  entry:    { icon: "block",              tone: "entry"    },
+  doc:      { icon: "description",        tone: "doc"      },
+  stale:    { icon: "history_toggle_off", tone: "stale"    },
 };
-function icon(name, tone = "neutral") {
-  const glyph = ICONS[name] || name;
-  return `<span class="icon-chip icon-chip--${tone}" aria-hidden="true"><span class="material-symbols-outlined">${glyph}</span></span>`;
-}
-function iconRaw(name) {
-  const glyph = ICONS[name] || name;
-  return `<span class="material-symbols-outlined" aria-hidden="true">${glyph}</span>`;
-}
+/* Matches a critical marker at the start of a heading or bullet:
+ *   "🚨 [MONEY] Fee"
+ *   "🚨 Fee"             (v0.3 compat — no type)
+ * The [TYPE] group is optional; type is undefined for untyped markers. */
+const CRITICAL_HEADING_RE = /^[\s\u00A0]*🚨(?:\s*\[(MONEY|DEADLINE|ENTRY|DOC|STALE)\])?\s*/i;
+
+/* ──────────────────────────────────────────────────────────
+   PUBLIC: renderReport(body, markdown, annotations, critical)
+   ────────────────────────────────────────────────────────── */
 
 /**
- * Parse the LLM markdown report (per visa-advisor-prompt.md §2)
- * into structured sections, then render into the report-body
- * container.
+ * @param {HTMLElement} body
+ * @param {string}      markdown     LLM-produced markdown with `### ` sections
+ * @param {Array<{title,url,start,end,snippet}>} annotations  span-level url_citation
+ *                                          annotations returned by the API.
+ *                                          May be empty/undefined for the
+ *                                          zero-annotation fallback.
+ * @param {Array<{label,value,source,type}>}    critical    typed critical facts
+ *                                          for the "Before you book" card.
+ *                                          May be empty/undefined.
+ * @param {string}      [caveats]    optional ⚠️ callout text
  */
-export function renderReport(body, markdown) {
+export function renderReport(body, markdown, annotations, critical, caveats) {
   body.innerHTML = "";
 
   const sections = parseSections(markdown);
-  const meta = extractMeta(markdown);
+  const titles   = sections.__titles || {};
+  const ann      = Array.isArray(annotations) ? annotations : [];
+  const crit     = Array.isArray(critical)     ? critical   : [];
 
   // Status hero
   if (sections.visaStatus) {
     body.appendChild(renderStatus(sections.visaStatus, sections.allowedStay));
   }
 
-  // Required documents
+  // Zero-annotation banner (top of report, above checklist)
+  if (ann.length === 0) {
+    body.appendChild(renderUnverifiedBanner());
+  }
+
+  // "Before you book" numbered checklist (critical types drive color)
+  if (crit.length) {
+    body.appendChild(renderBeforeYouBook(crit, sections, ann));
+  }
+
+  // Required documents — bullets get per-source verify links
   if (sections.requiredDocs) {
-    body.appendChild(renderDocsSection(sections.requiredDocs));
+    body.appendChild(renderDocsSection(sections.requiredDocs, titles.requiredDocs, ann, markdown));
   }
 
   // Passport validity, Fee, Processing time — small grid
   const grid = document.createElement("div");
   grid.className = "report-grid";
-  if (sections.passportValidity) grid.appendChild(renderMetaSection("Passport validity", "passport", sections.passportValidity));
-  if (sections.fee)              grid.appendChild(renderMetaSection("Fee", "fee", sections.fee));
-  if (sections.processingTime)   grid.appendChild(renderMetaSection("Processing time", "time", sections.processingTime));
+  if (sections.passportValidity) grid.appendChild(renderMetaSection(titles.passportValidity || "Passport validity", "passport", sections.passportValidity));
+  if (sections.fee)              grid.appendChild(renderMetaSection(titles.fee              || "Fee",              "fee",      sections.fee));
+  if (sections.processingTime)   grid.appendChild(renderMetaSection(titles.processingTime   || "Processing time",  "time",     sections.processingTime));
   if (grid.children.length) body.appendChild(grid);
 
   // Official URL CTA
   if (sections.officialUrl && /^https?:\/\//.test(sections.officialUrl.trim())) {
     body.appendChild(renderCta(sections.officialUrl));
   } else if (sections.officialUrl) {
-    body.appendChild(renderMetaSection("Official application", "shield", sections.officialUrl));
+    body.appendChild(renderMetaSection(titles.officialUrl || "Official application", "shield", sections.officialUrl));
   }
 
-  // Exception rules, Travel advisories (collapsible)
+  // Exception rules — bullets with verify links
   if (sections.exceptions && sections.exceptions !== "None identified") {
-    body.appendChild(renderCollapsible("Exception rules", "rule", sections.exceptions));
-  }
-  if (sections.advisories && sections.advisories !== "None relevant") {
-    body.appendChild(renderCollapsible("Travel advisories", "campaign", sections.advisories));
+    body.appendChild(renderBulletSection(titles.exceptions || "Exception rules", "rule", sections.exceptions, ann, { fullMarkdown: markdown }));
   }
 
-  // Sources
-  if (sections.sources) {
-    body.appendChild(renderSources(sections.sources));
+  // Travel advisories — bullets with verify links, collapsible
+  if (sections.advisories && sections.advisories !== "None relevant") {
+    body.appendChild(renderBulletSection(titles.advisories || "Travel advisories", "campaign", sections.advisories, ann, { collapsible: true, fullMarkdown: markdown }));
   }
 
   // Last verified
+  const meta = extractMeta(markdown);
   if (meta.lastVerified) {
     const meta_el = document.createElement("p");
     meta_el.className = "report-meta";
@@ -306,41 +307,111 @@ export function renderReport(body, markdown) {
     body.appendChild(meta_el);
   }
 
-  // Disclaimer (always last, exact text per prompt §8f)
+  // Disclaimer (always last)
   body.appendChild(renderDisclaimer(meta.lastVerified));
+
+  // Caveats callout (above disclaimer)
+  if (caveats && caveats.trim()) {
+    const dis = body.querySelector(".report-disclaimer");
+    if (dis) body.insertBefore(renderCaveats(caveats), dis);
+  }
+
+  // Post-render: strip 🚨 [TYPE] markers and tag the right CSS classes.
+  markCriticalFacts(body);
+
+  // Activate the shared tooltip singleton (idempotent — safe to call repeatedly).
+  ensureTooltip();
 }
 
 /* ---- Section parser ---- */
 function parseSections(md) {
   const out = {};
+  const titles = {};
   const blocks = md.split(/^###\s+/m).slice(1);
   blocks.forEach((block) => {
     const newline = block.indexOf("\n");
     const title = block.slice(0, newline).trim();
     const body  = block.slice(newline + 1).trim();
-    out[slugify(title)] = body;
+    const slug  = slugify(title);
+    out[slug]    = body;
+    titles[slug] = title;
   });
+  out.__titles = titles;
   return out;
 }
 
-const SECTION_KEYS = {
-  "visa":      "visaStatus",
-  "allowed":   "allowedStay",
-  "passport":  "passportValidity",
-  "fee":       "fee",
-  "typical":   "processingTime",
-  "required":  "requiredDocs",
-  "official":  "officialUrl",
-  "exception": "exceptions",
-  "travel":    "advisories",
-  "last":      "lastVerified",
-  "sources":   "sources",
-  "disclaimer":"disclaimer",
-};
-
 function slugify(t) {
-  const firstWord = t.toLowerCase().replace(/[^a-z]+/g, " ").trim().split(" ")[0];
-  return SECTION_KEYS[firstWord] || firstWord;
+  // Strip leading 🚨 and [TYPE] decorations before tokenising, so
+  // "🚨 [MONEY] Fee" → slug "fee", not "money".
+  const cleaned = String(t || "")
+    .replace(/^🚨\s*/, "")
+    .replace(/^\[[A-Z]+\]\s*/, "")
+    .replace(/^[^\p{L}\p{N}]+/u, "");
+  const firstWord = cleaned.toLowerCase().replace(/[^a-z]+/g, " ").trim().split(" ")[0];
+  const map = {
+    "visa":      "visaStatus",
+    "allowed":   "allowedStay",
+    "passport":  "passportValidity",
+    "fee":       "fee",
+    "typical":   "processingTime",
+    "required":  "requiredDocs",
+    "official":  "officialUrl",
+    "exception": "exceptions",
+    "travel":    "advisories",
+    "last":      "lastVerified",
+    "sources":   "sources",
+    "disclaimer":"disclaimer",
+  };
+  return map[firstWord] || firstWord;
+}
+
+/* Find the character offset of a section's body within the full markdown,
+   so annotation offsets from the API (which are relative to the full
+   response) can be translated to body-local coords for bullet matching. */
+function findSectionOffset(markdown, rawTitle) {
+  if (!rawTitle || !markdown) return 0;
+  const lines = markdown.split("\n");
+  let pos = 0;
+  // Compare by stripping decorations from both sides.
+  const target = rawTitle
+    .replace(/^🚨\s*(?:\[[A-Z]+\]\s*)?/, "")
+    .trim()
+    .toLowerCase();
+  for (const line of lines) {
+    if (line.startsWith("### ")) {
+      const cleanLine = line.slice(4)
+        .replace(/^🚨\s*(?:\[[A-Z]+\]\s*)?/, "")
+        .trim()
+        .toLowerCase();
+      if (cleanLine === target) {
+        return pos + line.length + 1; // +1 for newline
+      }
+    }
+    pos += line.length + 1;
+  }
+  return 0;
+}
+
+/* Strip the 🚨 [TYPE] decoration from a heading for display purposes. */
+function stripCriticalPrefix(title) {
+  return String(title || "")
+    .replace(/^🚨\s*/, "")
+    .replace(/^\[[A-Z]+\]\s*/, "")
+    .trim();
+}
+
+function annotationsForBody(annotations, bodyOffset) {
+  // Translate API offsets (in full markdown) to body-local. Filter out
+  // annotations that fall entirely outside this section's body.
+  return annotations
+    .map(a => {
+      if (a.start < 0 || a.end < 0) return a;
+      return { ...a, _localStart: a.start - bodyOffset, _localEnd: a.end - bodyOffset };
+    })
+    .filter(a => {
+      if (a.start < 0 || a.end < 0) return true; // keep orphans
+      return a._localEnd > 0 && a._localStart < Number.MAX_SAFE_INTEGER;
+    });
 }
 
 function extractMeta(md) {
@@ -348,7 +419,82 @@ function extractMeta(md) {
   return { lastVerified: last ? last[1] : new Date().toISOString().slice(0, 10) };
 }
 
-/* ---- Renderers ---- */
+/* ──────────────────────────────────────────────────────────
+   v0.4 — Bullet char-range mapper
+   Walks the markdown to find every "- foo" / "* foo" line and records
+   its [start, end] character range in the markdown. Used to map
+   API annotations → bullets by char-range overlap.
+   ────────────────────────────────────────────────────────── */
+
+function buildBulletCharMap(markdown) {
+  const bullets = [];
+  let pos = 0;
+  for (const line of markdown.split("\n")) {
+    const m = line.match(/^(\s*[-*•]\s+)(.*)/);
+    if (m && m[2].trim()) {
+      const contentStart = pos + m[1].length;
+      const contentEnd   = contentStart + m[2].length;
+      bullets.push({ start: contentStart, end: contentEnd, content: m[2] });
+    }
+    pos += line.length + 1; // +1 for \n
+  }
+  return bullets;
+}
+
+function annotationsForBullet(bullet, annotations) {
+  // Annotations may carry `_localStart` / `_localEnd` (body-local) OR
+  // `start` / `end` (full-markdown). Try local first.
+  return annotations.filter(a => {
+    const s = a._localStart ?? a.start;
+    const e = a._localEnd   ?? a.end;
+    if (s < 0 || e < 0) return false;
+    return s < bullet.end && e > bullet.start;
+  });
+}
+
+/* If an annotation has no start/end (URL-only with no span), attach it
+   to the nearest bullet by content proximity. */
+function attachUrlOnlyAnnotations(bullets, annotations) {
+  const positioned = annotations.filter(a => {
+    const s = a._localStart ?? a.start;
+    const e = a._localEnd   ?? a.end;
+    return s >= 0 && e >= 0;
+  });
+  const orphan     = annotations.filter(a => {
+    const s = a._localStart ?? a.start;
+    return !(s >= 0);
+  });
+  if (!orphan.length || !bullets.length) return bullets.map(b => ({
+    ...b, annotations: annotationsForBullet(b, positioned),
+  }));
+  // For each orphan, attach to the first bullet (best-effort).
+  return bullets.map((b, i) => ({
+    ...b,
+    annotations: [
+      ...annotationsForBullet(b, positioned),
+      ...(i === 0 ? orphan : []),
+    ],
+  }));
+}
+
+/* Deduplicate annotations by URL — same URL cited multiple times for one
+   bullet collapses to one verify link. */
+function dedupeByUrl(list) {
+  const seen = new Set();
+  const out = [];
+  for (const a of list) {
+    if (!a.url) continue;
+    if (seen.has(a.url)) continue;
+    seen.add(a.url);
+    out.push(a);
+  }
+  return out;
+}
+
+/* ──────────────────────────────────────────────────────────
+   v0.4 — Renderers
+   ────────────────────────────────────────────────────────── */
+
 function renderStatus(status, stay) {
   const wrap = document.createElement("section");
   wrap.className = "report-status";
@@ -375,22 +521,155 @@ function renderStatus(status, stay) {
   return wrap;
 }
 
-function renderDocsSection(md) {
+function renderUnverifiedBanner() {
+  const el = document.createElement("div");
+  el.className = "report-unverified-banner";
+  el.setAttribute("role", "alert");
+  el.innerHTML = `
+    <span class="material-symbols-outlined" aria-hidden="true">cloud_off</span>
+    <div>
+      <strong>Web research did not return grounded sources.</strong>
+      Verify all claims manually with the destination embassy before booking.
+    </div>
+  `;
+  return el;
+}
+
+function renderBeforeYouBook(critical, sections, annotations) {
+  const wrap = document.createElement("aside");
+  wrap.className = "before-you-book";
+  wrap.setAttribute("role", "region");
+  wrap.setAttribute("aria-labelledby", "before-you-book-title");
+
+  const items = critical.map((c, i) => {
+    const type = c.type && CRITICAL_TYPE_META[c.type] ? c.type : "";
+    const meta = type ? CRITICAL_TYPE_META[type] : null;
+    const icon = meta ? meta.icon : "flag";
+    const tone = meta ? meta.tone : "neutral";
+    const label = escapeHtml((c.label || "").trim() || `Step ${i + 1}`);
+    const value = escapeHtml((c.value || "").trim());
+    const source = (c.source || "").trim();
+    const lookupUrl = source && /^https?:\/\//.test(source) ? source : "";
+    const verify = lookupUrl
+      ? `<a class="critical-step-verify" href="${escapeAttr(lookupUrl)}" target="_blank" rel="noopener noreferrer" data-snippet="${escapeAttr(`Step ${i + 1}: ${c.label || ""}`)}">↗ Verify</a>`
+      : "";
+    const cls = type ? `critical-step critical-step--${type}` : "critical-step";
+    return `
+      <li class="${cls}" data-critical-type="${type}">
+        <span class="critical-step-number" aria-hidden="true">${i + 1}</span>
+        <span class="critical-step-icon icon-chip icon-chip--critical-${tone}" aria-hidden="true">
+          <span class="material-symbols-outlined">${icon}</span>
+        </span>
+        <div class="critical-step-body">
+          <div class="critical-step-label">${label}</div>
+          ${value ? `<div class="critical-step-value">${value}</div>` : ""}
+        </div>
+        ${verify}
+      </li>
+    `;
+  }).join("");
+
+  wrap.innerHTML = `
+    <h2 id="before-you-book-title" class="before-you-book-title">
+      <span class="material-symbols-outlined" aria-hidden="true">priority_high</span>
+      Before you book
+    </h2>
+    <p class="before-you-book-intro">
+      Confirm each item below before paying for non-refundable travel.
+    </p>
+    <ol class="before-you-book-list">${items}</ol>
+  `;
+  return wrap;
+}
+
+function renderDocsSection(md, rawTitle, annotations, fullMarkdown) {
+  return renderBulletSection(rawTitle || "Required documents (typical)", "docs", md, annotations, { fullMarkdown });
+}
+
+function renderBulletSection(rawTitle, iconName, md, annotations, opts = {}) {
+  const sec = opts.collapsible ? document.createElement("details") : document.createElement("section");
+  sec.className = opts.collapsible ? "report-section report-section--collapsible" : "report-section";
+
+  const headingHtml = `
+    <h2 class="report-section-title">
+      <span class="icon-chip icon-chip--neutral" aria-hidden="true">
+        <span class="material-symbols-outlined">${iconName === "docs" ? "article" : iconName === "rule" ? "rule" : iconName === "campaign" ? "campaign" : "info"}</span>
+      </span>
+      ${escapeHtml(rawTitle || "")}
+    </h2>
+  `;
+
+  if (opts.collapsible) {
+    sec.innerHTML = `<summary class="report-section-summary">${headingHtml}</summary>`;
+  } else {
+    sec.innerHTML = headingHtml;
+  }
+
+  const list = document.createElement("ul");
+  list.className = "report-section-value report-section-value--list report-bullets";
+
+  // Translate annotation offsets from full-markdown coords to body-local.
+  const bodyOffset = findSectionOffset(opts.fullMarkdown || "", rawTitle);
+  const localAnns = annotationsForBody(annotations || [], bodyOffset);
+
+  const allBullets = buildBulletCharMap(md);
   const items = md.split("\n")
     .map(l => l.replace(/^[-•*]\s+/, "").trim())
     .filter(Boolean);
-  const sec = document.createElement("section");
-  sec.className = "report-section";
-  sec.innerHTML = `
-    <h2 class="report-section-title">
-      ${icon("docs")}
-      Required documents
-    </h2>
-    <ul class="report-section-value report-section-value--list">
-      ${items.map(t => `<li>${escapeHtml(t)}</li>`).join("")}
-    </ul>
-  `;
+  const mapWithAnn = attachUrlOnlyAnnotations(allBullets, localAnns);
+
+  items.forEach((text, i) => {
+    const li = document.createElement("li");
+    li.className = "report-bullet";
+    let body = text;
+    const inlineMatch = body.match(CRITICAL_HEADING_RE);
+    if (inlineMatch) {
+      const t = inlineMatch[1] ? inlineMatch[1].toLowerCase() : "";
+      body = body.replace(CRITICAL_HEADING_RE, "").trim();
+      if (t) {
+        li.classList.add("critical-fact", `critical-fact--${t}`);
+        li.dataset.criticalType = t;
+      } else {
+        li.classList.add("critical-fact");
+      }
+    }
+    const textNode = document.createTextNode(body);
+    li.appendChild(textNode);
+
+    // Use localStart/localEnd (already body-local) for matching.
+    const anns = dedupeByUrl((mapWithAnn[i]?.annotations || []).map(a => ({
+      ...a,
+      start: a._localStart ?? a.start,
+      end:   a._localEnd   ?? a.end,
+    })));
+    if (anns.length) {
+      li.appendChild(renderVerifyLinks(anns));
+    }
+    list.appendChild(li);
+  });
+
+  sec.appendChild(list);
   return sec;
+}
+
+function renderVerifyLinks(annotations) {
+  const wrap = document.createElement("span");
+  wrap.className = "verify-links";
+  annotations.forEach((a, idx) => {
+    if (idx > 0) wrap.appendChild(document.createTextNode(" "));
+    const link = document.createElement("a");
+    link.className = "verify-link";
+    link.href        = a.url;
+    link.target      = "_blank";
+    link.rel         = "noopener noreferrer";
+    link.dataset.title   = a.title || "Source";
+    link.dataset.snippet = a.snippet || "";
+    link.dataset.verified = a.snippet ? "1" : "0";
+    link.setAttribute("aria-describedby", "cite-tooltip-singleton");
+    link.textContent = `↗ Verify on ${a.title || "source"}`;
+    wrap.appendChild(link);
+  });
+  return wrap;
 }
 
 function renderMetaSection(title, name, value) {
@@ -422,41 +701,6 @@ function renderCta(url) {
   return sec;
 }
 
-function renderCollapsible(title, name, value) {
-  const sec = document.createElement("details");
-  sec.className = "report-section report-section--collapsible";
-  sec.innerHTML = `
-    <summary class="report-section-summary">
-      <h2 class="report-section-title" style="margin-bottom:0">
-        ${icon(name)}
-        ${escapeHtml(title)}
-      </h2>
-    </summary>
-    <div class="report-section-value">${escapeHtml(value.trim())}</div>
-  `;
-  return sec;
-}
-
-function renderSources(md) {
-  const sec = document.createElement("section");
-  sec.className = "report-section";
-  const links = [];
-  md.split("\n").forEach((line) => {
-    const m = line.match(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/);
-    if (m) links.push({ label: m[1], url: m[2] });
-  });
-  sec.innerHTML = `
-    <h2 class="report-section-title">
-      ${icon("external")}
-      Sources
-    </h2>
-    <div class="report-section-value report-section-value--sources">
-      ${links.map(l => `<a href="${escapeAttr(l.url)}" target="_blank" rel="noopener noreferrer">${iconRaw("external")}${escapeHtml(l.label)}</a>`).join("")}
-    </div>
-  `;
-  return sec;
-}
-
 function renderCaveats(text) {
   const wrap = document.createElement("div");
   wrap.className = "report-caveats";
@@ -475,6 +719,69 @@ function renderDisclaimer(date) {
   return wrap;
 }
 
+/* ---- Icon helpers ---- */
+const ICONS = {
+  docs:     "article",
+  passport: "contact_page",
+  fee:      "credit_card",
+  time:     "schedule",
+  shield:   "shield",
+  rule:     "rule",
+  campaign: "campaign",
+  warn:     "warning_amber",
+  info:     "info",
+  external: "arrow_outward",
+  refresh:  "refresh",
+  help:     "help",
+  send:     "send",
+};
+function icon(name, tone = "neutral") {
+  const glyph = ICONS[name] || name;
+  return `<span class="icon-chip icon-chip--${tone}" aria-hidden="true"><span class="material-symbols-outlined">${glyph}</span></span>`;
+}
+function iconRaw(name) {
+  const glyph = ICONS[name] || name;
+  return `<span class="material-symbols-outlined" aria-hidden="true">${glyph}</span>`;
+}
+
+/* ---- Critical-fact marker (strip 🚨 [TYPE] and tag the right CSS classes) ---- */
+function markCriticalFacts(rootEl) {
+  // Section headings (h2.report-section-title)
+  rootEl.querySelectorAll(".report-section-title").forEach((h2) => {
+    const first = firstNonEmptyTextNode(h2);
+    if (!first) return;
+    const m = first.nodeValue.match(CRITICAL_HEADING_RE);
+    if (m) {
+      const type = m[1] ? m[1].toLowerCase() : "";
+      first.nodeValue = first.nodeValue.replace(CRITICAL_HEADING_RE, "").trim();
+      const section = h2.closest(".report-section");
+      if (section) {
+        section.classList.add("is-critical");
+        if (type) section.classList.add(`is-critical--${type}`);
+        if (type) section.dataset.criticalType = type;
+      }
+    }
+  });
+
+  // List items (already handled in renderBulletSection for the typed prefix).
+  // This pass catches anything we missed (e.g. plain 🚨 bullets from v0.3
+  // backward-compat).
+  rootEl.querySelectorAll("li").forEach((li) => {
+    if (li.classList.contains("critical-fact")) return;
+    const first = firstNonEmptyTextNode(li);
+    if (!first || !first.nodeValue.includes("🚨")) return;
+    first.nodeValue = first.nodeValue.replace(/🚨\s*/, "").trim();
+    li.classList.add("critical-fact");
+  });
+}
+
+function firstNonEmptyTextNode(el) {
+  for (const node of el.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE && node.nodeValue && node.nodeValue.trim()) return node;
+  }
+  return null;
+}
+
 /* ---- Helpers ---- */
 function escapeHtml(s) {
   return String(s)
@@ -487,37 +794,175 @@ function escapeHtml(s) {
 function escapeAttr(s) { return escapeHtml(s); }
 
 /* ──────────────────────────────────────────────────────────
+   Shared tooltip singleton — shows source title + snippet on hover/focus.
+   Same pattern as v0.3, but reads `data-snippet` (API-provided excerpt)
+   instead of `data-quote` (LLM-provided verbatim).
+   ────────────────────────────────────────────────────────── */
+
+let _tooltipEl = null;
+let _tooltipActiveCite = null;
+
+function ensureTooltip() {
+  if (_tooltipEl) return _tooltipEl;
+
+  const el = document.createElement("div");
+  el.className = "cite-tooltip";
+  el.id        = "cite-tooltip-singleton";
+  el.setAttribute("role", "tooltip");
+  el.setAttribute("aria-hidden", "true");
+  el.hidden = true;
+  el.innerHTML = `
+    <div class="cite-tooltip-source"></div>
+    <blockquote class="cite-tooltip-quote"></blockquote>
+    <div class="cite-tooltip-foot">
+      <span class="cite-tooltip-flag"></span>
+      <span class="cite-tooltip-hint">Click to open source</span>
+    </div>
+  `;
+  document.body.appendChild(el);
+  _tooltipEl = el;
+
+  document.addEventListener("click", (e) => {
+    if (!el.hidden && !e.target.closest(".verify-link") && !e.target.closest(".cite-link")) hideTooltip();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !el.hidden) {
+      hideTooltip();
+      const active = document.activeElement;
+      if (active && active.classList && (active.classList.contains("verify-link") || active.classList.contains("cite-link"))) {
+        active.blur();
+      }
+    }
+  });
+  window.addEventListener("scroll", hideTooltip, { passive: true, capture: true });
+  window.addEventListener("resize", hideTooltip);
+
+  return el;
+}
+
+function showTooltipFor(citeLink) {
+  const el = ensureTooltip();
+  const sourceTitle = citeLink.dataset.title   || `Source`;
+  const snippet     = citeLink.dataset.snippet || "";
+  const verified    = citeLink.dataset.verified === "1";
+
+  el.querySelector(".cite-tooltip-source").textContent = sourceTitle + (verified ? "" : "  (unverified)");
+  const quoteEl = el.querySelector(".cite-tooltip-quote");
+  if (snippet) {
+    quoteEl.textContent = `"${snippet}"`;
+    quoteEl.classList.remove("cite-tooltip-quote--missing");
+  } else {
+    quoteEl.textContent = "Source snippet not provided by API";
+    quoteEl.classList.add("cite-tooltip-quote--missing");
+  }
+  el.querySelector(".cite-tooltip-flag").textContent = verified ? "[verified]" : "[unverified]";
+  el.querySelector(".cite-tooltip-hint").textContent = verified ? "Click to open source" : "Click to attempt";
+
+  el.hidden = false;
+  el.setAttribute("aria-hidden", "false");
+  const r = citeLink.getBoundingClientRect();
+  el.style.visibility = "hidden";
+  el.style.left = "0px";
+  el.style.top  = "0px";
+  // eslint-disable-next-line no-unused-expressions
+  el.offsetHeight;
+  const tr = el.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  let top  = r.top - tr.height - 8;
+  let place = "above";
+  if (top < 8) { top = r.bottom + 8; place = "below"; }
+  let left = r.left + r.width / 2 - tr.width / 2;
+  if (left < 8) left = 8;
+  if (left + tr.width > vw - 8) left = vw - tr.width - 8;
+
+  el.style.left = `${left + window.scrollX}px`;
+  el.style.top  = `${top  + window.scrollY}px`;
+  el.dataset.place = place;
+  el.style.visibility = "";
+
+  _tooltipActiveCite = citeLink;
+}
+
+function hideTooltip() {
+  if (!_tooltipEl || _tooltipEl.hidden) return;
+  _tooltipEl.hidden = true;
+  _tooltipEl.setAttribute("aria-hidden", "true");
+  _tooltipActiveCite = null;
+}
+
+document.addEventListener("mouseover", (e) => {
+  const link = e.target.closest && e.target.closest(".verify-link, .cite-link");
+  if (link) showTooltipFor(link);
+});
+document.addEventListener("mouseout", (e) => {
+  const link = e.target.closest && e.target.closest(".verify-link, .cite-link");
+  if (link && _tooltipActiveCite === link) hideTooltip();
+});
+document.addEventListener("focusin", (e) => {
+  if (e.target.classList && (e.target.classList.contains("verify-link") || e.target.classList.contains("cite-link"))) {
+    showTooltipFor(e.target);
+  }
+});
+document.addEventListener("focusout", (e) => {
+  if (e.target.classList && (e.target.classList.contains("verify-link") || e.target.classList.contains("cite-link"))) hideTooltip();
+});
+document.addEventListener("click", (e) => {
+  const link = e.target.closest && e.target.closest(".verify-link");
+  if (!link) return;
+  if (_tooltipActiveCite === link) { hideTooltip(); return; }
+  if (window.matchMedia("(hover: none)").matches) {
+    e.preventDefault();
+    showTooltipFor(link);
+  }
+});
+
+/* ──────────────────────────────────────────────────────────
    PUBLIC API for the report view (state machine)
    ────────────────────────────────────────────────────────── */
 
 export function initReportView({ onEdit }) {
   const root = {
-    view:        document.querySelector('[data-view="report"]'),
-    from:        document.querySelector("[data-report-from]"),
-    to:          document.querySelector("[data-report-to]"),
-    loading:     document.querySelector("[data-report-loading]"),
-    error:       document.querySelector("[data-report-error]"),
-    errorTitle:  document.querySelector("[data-report-error-title]"),
-    errorBody:   document.querySelector("[data-report-error-body]"),
-    clarify:     document.querySelector("[data-report-clarify]"),
-    clarifyQ:    document.querySelector("[data-clarify-question]"),
-    clarifyForm: document.querySelector("[data-clarify-form]"),
-    body:        document.querySelector("[data-report-body]"),
-    retryBtn:    document.querySelector("[data-action=retry]"),
-    copyBtn:     document.querySelector("[data-action=copy]"),
-    shareBtn:    document.querySelector("[data-action=share]"),
-    editBtn:     document.querySelector("[data-action=edit]"),
-    stepper:     document.querySelector("[data-stepper]"),
-    progress:    document.querySelector("[data-action-bar-progress]"),
-    progressFill:document.querySelector("[data-action-bar-progress-fill]"),
+    view:          document.querySelector('[data-view="report"]'),
+    from:          document.querySelector("[data-report-from]"),
+    to:            document.querySelector("[data-report-to]"),
+    loading:       document.querySelector("[data-report-loading]"),
+    error:         document.querySelector("[data-report-error]"),
+    errorTitle:    document.querySelector("[data-report-error-title]"),
+    errorBody:     document.querySelector("[data-report-error-body]"),
+    clarify:       document.querySelector("[data-report-clarify]"),
+    clarifyQ:      document.querySelector("[data-clarify-question]"),
+    clarifyForm:   document.querySelector("[data-clarify-form]"),
+    body:          document.querySelector("[data-report-body]"),
+    retryBtn:      document.querySelector("[data-action=retry]"),
+    copyBtn:       document.querySelector("[data-action=copy]"),
+    shareBtn:      document.querySelector("[data-action=share]"),
+    editBtn:       document.querySelector("[data-action=edit]"),
+    stepper:       document.querySelector("[data-stepper]"),
+    progress:      document.querySelector("[data-action-bar-progress]"),
+    progressFill:  document.querySelector("[data-action-bar-progress-fill]"),
     progressSteps: document.querySelectorAll("[data-progress-step]"),
+    progressLabel: document.querySelector("[data-progress-label]"),
   };
 
-  /* Inline progress strip lives in the sticky action bar. The in-DOM
-     stepper stays as an aria-live region for screen readers but is
-     visually hidden. */
-  const PROGRESS_STEPS = ["prompt", "consult", "compile"];
+  const PROGRESS_MESSAGES = [
+    "Researching Wikipedia visa policy",
+    "Checking IATA Travel Centre",
+    "Verifying with destination .gov site",
+    "Cross-checking travel advisories",
+    "Compiling your report",
+  ];
+  let progressTimer = null;
+  let progressIdx   = 0;
+  let progressStartedAt = 0;
+
+  function setProgressMessage(text) {
+    if (root.progressLabel) root.progressLabel.textContent = text;
+  }
+
   function setProgress(name) {
+    const PROGRESS_STEPS = ["prompt", "consult", "compile"];
     const idx = PROGRESS_STEPS.indexOf(name);
     if (root.progressSteps) {
       root.progressSteps.forEach((el) => {
@@ -527,11 +972,10 @@ export function initReportView({ onEdit }) {
       });
     }
     if (root.stepper) {
-      const idx2 = PROGRESS_STEPS.indexOf(name);
       root.stepper.querySelectorAll(".step").forEach((li) => {
         const liIdx = PROGRESS_STEPS.indexOf(li.dataset.step);
-        li.classList.toggle("is-active", liIdx === idx2);
-        li.classList.toggle("is-done",   liIdx >= 0 && liIdx < idx2);
+        li.classList.toggle("is-active", liIdx === idx);
+        li.classList.toggle("is-done",   liIdx >= 0 && liIdx < idx);
       });
     }
   }
@@ -540,7 +984,25 @@ export function initReportView({ onEdit }) {
     if (root.progress)     root.progress.hidden = false;
     if (root.progressFill) root.progressFill.style.width = `${percent}%`;
   }
+  function startProgress() {
+    if (root.progress)     root.progress.hidden = false;
+    setProgress("prompt");
+    showProgress(0);
+    progressStartedAt = Date.now();
+    progressIdx = 0;
+    setProgressMessage(PROGRESS_MESSAGES[0]);
+    if (progressTimer) clearInterval(progressTimer);
+    progressTimer = setInterval(() => {
+      progressIdx = (progressIdx + 1) % PROGRESS_MESSAGES.length;
+      setProgressMessage(PROGRESS_MESSAGES[progressIdx]);
+      // Advance the bar smoothly up to 95%, leaving room for the final swap.
+      const elapsed = Date.now() - progressStartedAt;
+      const target = Math.min(95, (elapsed / 90_000) * 95);
+      showProgress(target);
+    }, 6000);
+  }
   function hideProgress() {
+    if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
     if (root.progress)     root.progress.hidden = true;
     if (root.progressFill) root.progressFill.style.width = "0%";
     if (root.progressSteps) {
@@ -548,6 +1010,7 @@ export function initReportView({ onEdit }) {
         el.classList.remove("is-active", "is-done");
       });
     }
+    if (root.progressLabel) setProgressMessage("");
   }
 
   // Wire action buttons
@@ -562,7 +1025,7 @@ export function initReportView({ onEdit }) {
       return;
     }
     try {
-      const mode = await copyReport(root._lastMarkdown, root._lastCaveats);
+      const mode = await copyReport(root._lastMarkdown, root._lastCaveats, root._lastAnnotations, root._lastCritical);
       announce(mode === "rich" ? "Rich-text report copied" : "Plain-text report copied");
       flashBtn(root.copyBtn, mode === "rich" ? "Copied!" : "Copied as text");
     } catch (err) {
@@ -620,16 +1083,10 @@ export function initReportView({ onEdit }) {
   async function runQuery(input) {
     root._lastInput = input;
     show("loading");
-    setProgress("prompt");
-    showProgress(0);
-    // Brief beat so the user sees the first step land before swap.
-    const advanceTick = setTimeout(() => {
-      setProgress("consult");
-      showProgress(50);
-    }, 120);
+    startProgress();
     try {
       const data = await queryAdvisor(input);
-      clearTimeout(advanceTick);
+      stopProgress();   // helper defined below
       setProgress("compile");
       showProgress(100);
 
@@ -638,16 +1095,12 @@ export function initReportView({ onEdit }) {
         showClarify(data.question);
         return;
       }
-      // Cache for Copy
-      root._lastMarkdown = data.markdown;
-      root._lastCaveats  = data.caveats;
-      // Render markdown
-      renderReport(root.body, data.markdown);
-      // Append caveats (if provided) above the disclaimer
-      if (data.caveats) {
-        const dis = root.body.querySelector(".report-disclaimer");
-        if (dis) root.body.insertBefore(renderCaveats(data.caveats), dis);
-      }
+      root._lastMarkdown    = data.markdown;
+      root._lastCaveats     = data.caveats;
+      root._lastAnnotations = data.annotations || [];
+      root._lastCritical    = data.critical     || [];
+      renderReport(root.body, data.markdown, root._lastAnnotations, root._lastCritical, root._lastCaveats);
+
       // Brief beat so the user sees "Compiling your report" land before swap.
       await new Promise(r => setTimeout(r, 220));
       show("report");
@@ -658,13 +1111,17 @@ export function initReportView({ onEdit }) {
       const isTimeout = err.code === "TIMEOUT" || err.name === "AbortError";
       const isPrompt  = err.code === "PROMPT_LOAD";
       const title = isPrompt  ? "Couldn't load advisor prompt"
-                  : isTimeout ? "Request timed out"
+                  : isTimeout ? "Request timed out — web research can take up to 90 seconds"
                               : "Couldn't reach the service";
       const body  = isPrompt  ? "The advisor's knowledge base failed to load. Refresh the page and try again."
                   : isTimeout ? "The advisor took too long to respond. Please try again."
                               : (err.message || "Check your connection and try again.");
       showError(title, body);
     }
+  }
+
+  function stopProgress() {
+    if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
   }
 
   return {
@@ -693,37 +1150,44 @@ function announce(text) {
 }
 
 /* ──────────────────────────────────────────────────────────
-   Rich-text Copy — HTML + plain-text via ClipboardItem
-   Pastes as styled report into Teams / Outlook / Gmail / Slack (rich),
-   or as readable sections into Notion / text editors / terminals (plain).
+   Rich-text Copy — HTML + plain-text via ClipboardItem.
+   For v0.4 the report has typed critical markers and per-bullet
+   verify links; we serialise both into the clipboard HTML and the
+   plain-text fallback.
    ────────────────────────────────────────────────────────── */
 
 const CLIP = {
-  font: "font-family:'Inter','Helvetica Neue',Arial,sans-serif",
+  font:     "font-family:'Inter','Helvetica Neue',Arial,sans-serif",
   fontHead: "font-family:'Inter Tight','Inter','Helvetica Neue',Arial,sans-serif",
-  c_text:    "#141414",
-  c_sub:     "#6A6B6E",
-  c_border:  "#E4E5E6",
-  c_card:    "#FFFFFF",
-  c_soft:    "#F4F3D8",
-  c_neutral: "#DCDBC7",
-  c_green:   "#C1F11D",
-  c_greenDk: "#9DD90D",
-  c_lightGr: "#E4FF88",
-  c_warnBg:  "#FFF1C0",
-  c_warnBd:  "#FFC13C",
-  c_warnTxt: "#8C5C00",
-  c_discBg:  "#F5F5F6",
-  c_accent:  "#4087E1",
-  c_white:   "#FFFFFF",
-  c_black:   "#141414",
+  c_text:   "#141414",
+  c_sub:    "#6A6B6E",
+  c_border: "#E4E5E6",
+  c_card:   "#FFFFFF",
+  c_soft:   "#F4F3D8",
+  c_neutral:"#DCDBC7",
+  c_green:  "#C1F11D",
+  c_greenDk:"#9DD90D",
+  c_warnBg: "#FFF1C0",
+  c_warnBd: "#FFC13C",
+  c_warnTxt:"#8C5C00",
+  c_discBg: "#F5F5F6",
+  c_accent: "#4087E1",
+  c_white:  "#FFFFFF",
+  c_black:  "#141414",
+  c_money:  "#FFEBEE",
+  c_moneyT: "#B71C1C",
+  c_dead:   "#FFF1C0",
+  c_deadT:  "#B45309",
+  c_doc:    "#E0E7FF",
+  c_docT:   "#1E40AF",
 };
 
-const ICON_GLYPH = {
-  docs:     "📄", passport: "🪪", fee:      "💳",
-  time:     "🕐", shield:   "🛡", rule:     "📋",
-  campaign: "📢", warn:     "⚠️", info:     "ℹ️",
-  external: "↗", visaFree:  "✓",
+const CLIP_ICON = {
+  money:    "💰",
+  deadline: "⏰",
+  entry:    "🚫",
+  doc:      "📄",
+  stale:    "⏳",
 };
 
 function escapeHtmlAttr(s) {
@@ -733,134 +1197,132 @@ function escapeHtmlSafe(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function clipWrap(inner) {
-  return (
-    `<div style="max-width:680px;margin:0 auto;${CLIP.font};color:${CLIP.c_text};line-height:1.5;">` +
-    inner +
-    `</div>`
-  );
-}
-function clipChip(glyph, tone) {
-  const bg = {
-    "visa-free": CLIP.c_green,
-    "eta":       CLIP.c_lightGr,
-    "evisa":     "#E2F4FF", "evisaText": "#2C5F7C",
-    "voa":       "#E4FFAF", "voaText":   "#3F6207",
-    "embassy":   "#FFF1C0", "embassyText": CLIP.c_warnTxt,
-    "restricted":"#FFDFDE", "restrictedText": "#8C2A24",
-    "warn":      CLIP.c_warnBg, "warnText": CLIP.c_warnTxt,
-    "neutral":   CLIP.c_soft,
-    "accent":    "transparent",
-  }[tone] || CLIP.c_soft;
-  const txt = ({
-    "evisa":     "#2C5F7C",
-    "voa":       "#3F6207",
-    "embassy":   CLIP.c_warnTxt,
-    "restricted":"#8C2A24",
-    "warn":      CLIP.c_warnTxt,
-    "accent":    CLIP.c_accent,
-  })[tone] || CLIP.c_text;
-  return (
-    `<span style="display:inline-flex;align-items:center;justify-content:center;` +
-    `width:28px;height:28px;border-radius:8px;background:${escapeHtmlSafe(bg)};color:${escapeHtmlSafe(txt)};` +
-    `font-size:18px;line-height:1;flex-shrink:0;margin-right:8px;vertical-align:-4px;">` +
-    escapeHtmlSafe(glyph) +
-    `</span>`
-  );
-}
-
-function clipSection(title, name, bodyHtml) {
-  return (
-    `<div style="margin-top:16px;padding:20px 24px;background:${CLIP.c_card};` +
-    `border:1px solid ${CLIP.c_border};border-radius:16px;">` +
-    `<h3 style="margin:0 0 12px;font-size:13px;font-weight:600;color:${CLIP.c_sub};` +
-    `text-transform:uppercase;letter-spacing:0.04em;${CLIP.font};">` +
-    clipChip(ICON_GLYPH[name] || "•", "neutral") +
-    escapeHtmlSafe(title) +
-    `</h3>` +
-    bodyHtml +
-    `</div>`
-  );
-}
-
-function buildReportHtml(md, caveats) {
+function buildReportHtml(md, caveats, annotations, critical) {
   const s       = parseSections(md);
   const meta    = extractMeta(md);
+  const ann     = Array.isArray(annotations) ? annotations : [];
+  const crit    = Array.isArray(critical)    ? critical   : [];
+
+  // Status hero (compact for email).
   const normSt  = (s.visaStatus || "").trim().toLowerCase();
   const stKey   = Object.keys(STATUS_CLASS).find(k => normSt.includes(k)) || "embassy";
-  const statusClass = STATUS_CLASS[stKey];
   const tone    = STATUS_TONE[stKey];
-  const glyph   = STATUS_ICON[stKey];
-
-  // Status hero
-  const chipBg = ({
-    "visa-free": CLIP.c_green,
-    "eta":       CLIP.c_lightGr,
-    "evisa":     "#E2F4FF",
-    "voa":       "#E4FFAF",
-    "embassy":   "#FFF1C0",
-    "restricted":"#FFDFDE",
-  })[tone] || "#FFF1C0";
-  const chipFg = ({
-    "visa-free": CLIP.c_black,
-    "eta":       CLIP.c_black,
-    "evisa":     "#2C5F7C",
-    "voa":       "#3F6207",
-    "embassy":   CLIP.c_warnTxt,
-    "restricted":"#8C2A24",
-  })[tone] || CLIP.c_black;
-  const stay = s.allowedStay && s.allowedStay.trim() !== "N/A" ? s.allowedStay.trim() : "";
+  const chipBg  = ({ visa_free: CLIP.c_green, eta: "#E4FF88", evisa: "#E2F4FF", voa: "#E4FFAF", embassy: "#FFF1C0", restricted: "#FFDFDE" })[tone] || "#FFF1C0";
+  const chipFg  = ({ visa_free: CLIP.c_black, eta: CLIP.c_black, evisa: "#2C5F7C", voa: "#3F6207", embassy: CLIP.c_warnTxt, restricted: "#8C2A24" })[tone] || CLIP.c_black;
+  const stay    = s.allowedStay && s.allowedStay.trim() !== "N/A" ? s.allowedStay.trim() : "";
   const statusHtml =
     `<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;` +
     `padding:20px 24px;background:${CLIP.c_soft};border:1px solid ${CLIP.c_neutral};border-radius:20px;">` +
     `<span style="display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 20px;border-radius:9999px;` +
     `background:${escapeHtmlSafe(chipBg)};color:${escapeHtmlSafe(chipFg)};` +
-    `${CLIP.fontHead};font-weight:700;font-size:18px;letter-spacing:-0.02em;">` +
-    `<span style="display:inline-flex;align-items:center;justify-content:center;` +
-    `width:24px;height:24px;border-radius:6px;background:${escapeHtmlSafe(chipBg)};` +
-    `color:${escapeHtmlSafe(chipFg)};font-size:14px;">${escapeHtmlSafe(ICON_GLYPH.visaFree)}</span>` +
-    escapeHtmlSafe((s.visaStatus || "").trim()) +
-    `</span>` +
+    `${CLIP.fontHead};font-weight:700;font-size:18px;letter-spacing:-0.02em;">${escapeHtmlSafe((s.visaStatus || "").trim())}</span>` +
     (stay ? (
       `<span style="text-align:right;">` +
       `<span style="display:block;font-size:11px;color:${CLIP.c_sub};text-transform:uppercase;letter-spacing:0.05em;">Allowed stay</span>` +
-      `<span style="display:block;font-size:16px;font-weight:600;color:${CLIP.c_text};margin-top:2px;">` +
-      escapeHtmlSafe(stay) +
-      `</span></span>`
+      `<span style="display:block;font-size:16px;font-weight:600;color:${CLIP.c_text};margin-top:2px;">${escapeHtmlSafe(stay)}</span></span>`
     ) : "") +
     `</div>`;
 
   const sections = [];
 
-  // Required documents
+  // Zero-annotation banner.
+  if (ann.length === 0) {
+    sections.push(
+      `<div style="margin-top:16px;padding:12px 16px;background:${CLIP.c_warnBg};` +
+      `border:1px solid ${CLIP.c_warnBd};border-radius:12px;color:${CLIP.c_warnTxt};font-size:13px;">` +
+      `<strong>Web research did not return grounded sources.</strong> Verify all claims with the destination embassy before booking.` +
+      `</div>`
+    );
+  }
+
+  // Before you book checklist.
+  if (crit.length) {
+    const rows = crit.map((c, i) => {
+      const type = c.type && CLIP_ICON[c.type] ? c.type : "";
+      const glyph = type ? CLIP_ICON[type] : "⚑";
+      const bg = type === "money" ? CLIP.c_money
+              : type === "deadline" ? CLIP.c_dead
+              : type === "doc" ? CLIP.c_doc
+              : "#F3F4F6";
+      const fg = type === "money" ? CLIP.c_moneyT
+              : type === "deadline" ? CLIP.c_deadT
+              : type === "doc" ? CLIP.c_docT
+              : "#6B7280";
+      const lookupUrl = c.source && /^https?:\/\//.test(c.source) ? c.source : "";
+      const link = lookupUrl
+        ? ` <a href="${escapeHtmlAttr(lookupUrl)}" style="color:${CLIP.c_accent};text-decoration:underline;font-size:13px;">↗ Verify</a>`
+        : "";
+      return (
+        `<li style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;` +
+        `border-top:1px solid ${CLIP.c_border};background:${bg};padding:10px 14px;border-radius:8px;margin-top:6px;">` +
+        `<span style="display:inline-flex;align-items:center;justify-content:center;` +
+        `width:28px;height:28px;border-radius:9999px;background:${CLIP.c_white};` +
+        `color:${fg};font-weight:700;flex-shrink:0;">${i + 1}</span>` +
+        `<span style="font-size:16px;line-height:1;color:${fg};flex-shrink:0;margin-top:4px;">${glyph}</span>` +
+        `<div style="flex:1;">` +
+        `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;` +
+        `color:${CLIP.c_sub};font-weight:600;">${escapeHtmlSafe(c.label || "")}</div>` +
+        `<div style="font-size:15px;font-weight:600;color:${CLIP.c_text};margin-top:2px;">${escapeHtmlSafe(c.value || "")}</div>` +
+        `</div>${link}</li>`
+      );
+    }).join("");
+    sections.push(
+      `<div style="margin-top:16px;padding:20px 24px;background:${CLIP.c_warnBg};` +
+      `border:1px solid ${CLIP.c_warnBd};border-radius:16px;color:${CLIP.c_warnTxt};">` +
+      `<div style="font-weight:700;font-size:13px;letter-spacing:0.04em;text-transform:uppercase;` +
+      `margin-bottom:10px;">🚨 BEFORE YOU BOOK</div>` +
+      `<ol style="list-style:none;padding:0;margin:0;">${rows}</ol>` +
+      `</div>`
+    );
+  }
+
+  // Required documents (with verify links).
   if (s.requiredDocs) {
+    const bodyOffset = findSectionOffset(md, titles.requiredDocs || "Required documents (typical)");
+    const localAnns = annotationsForBody(ann, bodyOffset);
+    const bullets = buildBulletCharMap(s.requiredDocs);
+    const mapWithAnn = attachUrlOnlyAnnotations(bullets, localAnns);
     const items = s.requiredDocs.split("\n")
       .map(l => l.replace(/^[-•*]\s+/, "").trim())
       .filter(Boolean)
-      .map(t =>
-        `<li style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:15px;line-height:1.45;">` +
-        `<span style="flex-shrink:0;display:inline-block;width:6px;height:6px;border-radius:9999px;background:${CLIP.c_green};margin-top:8px;"></span>` +
-        escapeHtmlSafe(t) +
-        `</li>`
-      ).join("");
-    sections.push(clipSection(
-      "Required documents", "docs",
-      `<ul style="list-style:none;padding:0;margin:0;">${items}</ul>`,
-    ));
+      .map((t, i) => {
+        const anns = dedupeByUrl((mapWithAnn[i]?.annotations || []).map(a => ({
+          ...a,
+          start: a._localStart ?? a.start,
+          end:   a._localEnd   ?? a.end,
+        })));
+        const links = anns.map(a =>
+          ` <a href="${escapeHtmlAttr(a.url)}" style="color:${CLIP.c_accent};text-decoration:underline;font-size:13px;">↗ ${escapeHtmlSafe(a.title || "Verify")}</a>`
+        ).join("");
+        return `<li style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:15px;line-height:1.45;">
+          <span style="flex-shrink:0;display:inline-block;width:6px;height:6px;border-radius:9999px;background:${CLIP.c_green};margin-top:8px;"></span>
+          <span>${escapeHtmlSafe(t)}${links}</span>
+        </li>`;
+      }).join("");
+    sections.push(
+      `<div style="margin-top:16px;padding:20px 24px;background:${CLIP.c_card};` +
+      `border:1px solid ${CLIP.c_border};border-radius:16px;">` +
+      `<h3 style="margin:0 0 12px;font-size:13px;font-weight:600;color:${CLIP.c_sub};` +
+      `text-transform:uppercase;letter-spacing:0.04em;">${escapeHtmlSafe(titles.requiredDocs ? stripCriticalPrefix(titles.requiredDocs) : "Required documents (typical)")}</h3>` +
+      `<ul style="list-style:none;padding:0;margin:0;">${items}</ul>` +
+      `</div>`
+    );
   }
 
   // Passport / Fee / Processing (3-col table for email safety)
   const grid = [];
-  if (s.passportValidity) grid.push({ title: "Passport validity", name: "passport", body: s.passportValidity });
-  if (s.fee)              grid.push({ title: "Fee",                name: "fee",       body: s.fee });
-  if (s.processingTime)   grid.push({ title: "Processing time",   name: "time",      body: s.processingTime });
+  if (s.passportValidity) grid.push({ title: "Passport validity", body: s.passportValidity });
+  if (s.fee)              grid.push({ title: "Fee",                body: s.fee });
+  if (s.processingTime)   grid.push({ title: "Processing time",   body: s.processingTime });
   if (grid.length) {
     const cells = grid.map((g, i) => {
       const pad = i === 0 ? "" : "padding-left:8px;";
       return (
         `<td style="width:33.33%;vertical-align:top;${pad}">` +
-        clipSection(g.title, g.name, `<div style="font-size:15px;line-height:1.45;color:${CLIP.c_text};">${escapeHtmlSafe(g.body.trim())}</div>`) +
-        `</td>`
+        `<div style="padding:20px 24px;background:${CLIP.c_card};border:1px solid ${CLIP.c_border};border-radius:16px;">` +
+        `<h3 style="margin:0 0 8px;font-size:13px;font-weight:600;color:${CLIP.c_sub};text-transform:uppercase;letter-spacing:0.04em;">${escapeHtmlSafe(g.title)}</h3>` +
+        `<div style="font-size:15px;line-height:1.45;color:${CLIP.c_text};">${escapeHtmlSafe(g.body.trim())}</div>` +
+        `</div></td>`
       );
     }).join("");
     sections.push(
@@ -871,56 +1333,50 @@ function buildReportHtml(md, caveats) {
     );
   }
 
-  // Official application CTA
+  // Official CTA
   if (s.officialUrl && /^https?:\/\//.test(s.officialUrl.trim())) {
-    sections.push(clipSection(
-      "Official application", "shield",
+    sections.push(
+      `<div style="margin-top:16px;padding:20px 24px;background:${CLIP.c_card};` +
+      `border:1px solid ${CLIP.c_border};border-radius:16px;">` +
+      `<h3 style="margin:0 0 12px;font-size:13px;font-weight:600;color:${CLIP.c_sub};` +
+      `text-transform:uppercase;letter-spacing:0.04em;">Official application</h3>` +
       `<a href="${escapeHtmlAttr(s.officialUrl.trim())}" style="display:flex;align-items:center;justify-content:center;` +
       `gap:8px;min-height:48px;padding:0 24px;background:${CLIP.c_green};color:${CLIP.c_black};` +
       `border:2px solid ${CLIP.c_green};border-radius:12px;font-weight:600;font-size:15px;text-decoration:none;">` +
-      `Open official site <span style="font-size:14px;">${escapeHtmlSafe(ICON_GLYPH.external)}</span>` +
-      `</a>`,
-    ));
-  } else if (s.officialUrl) {
-    sections.push(clipSection(
-      "Official application", "shield",
-      `<div style="font-size:15px;line-height:1.45;color:${CLIP.c_text};">${escapeHtmlSafe(s.officialUrl.trim())}</div>`,
-    ));
+      `Open official site ↗</a></div>`
+    );
   }
 
   // Caveats
-  if (caveats) {
+  if (caveats && caveats.trim()) {
     sections.push(
       `<div style="margin-top:16px;padding:16px 20px;background:${CLIP.c_warnBg};` +
       `border:1px solid ${CLIP.c_warnBd};border-radius:16px;color:${CLIP.c_warnTxt};">` +
-      `<div style="font-weight:700;font-size:15px;margin-bottom:8px;display:flex;align-items:center;">` +
-      clipChip(ICON_GLYPH.warn, "warn") + `<span>Caveats</span>` +
-      `</div>` +
+      `<div style="font-weight:700;font-size:15px;margin-bottom:8px;">⚠️ Caveats</div>` +
       `<div style="font-size:14px;line-height:1.5;white-space:pre-wrap;">${escapeHtmlSafe(caveats.trim())}</div>` +
       `</div>`
     );
   }
 
-  // Sources
-  if (s.sources) {
-    const links = [];
-    s.sources.split("\n").forEach((line) => {
-      const m = line.match(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/);
-      if (m) links.push({ label: m[1], url: m[2] });
-    });
-    if (links.length) {
-      const linksHtml = links.map(l =>
-        `<a href="${escapeHtmlAttr(l.url)}" style="display:inline-flex;align-items:center;gap:6px;` +
-        `color:${CLIP.c_accent};font-size:14px;text-decoration:underline;margin-right:12px;margin-top:4px;">` +
-        `<span style="font-size:14px;">${escapeHtmlSafe(ICON_GLYPH.external)}</span>` +
-        `<span>${escapeHtmlSafe(l.label)}</span>` +
-        `</a>`
-      ).join("");
-      sections.push(clipSection(
-        "Sources", "external",
-        `<div style="display:block;">${linksHtml}</div>`,
-      ));
-    }
+  // Sources — list annotations.
+  if (ann.length) {
+    const linksHtml = ann.map(a => {
+      const verified = a.snippet ? "" : " <em>(no snippet)</em>";
+      return (
+        `<div style="margin-top:8px;font-size:14px;line-height:1.45;">` +
+        `<a href="${escapeHtmlAttr(a.url)}" style="color:${CLIP.c_accent};text-decoration:underline;">${escapeHtmlSafe(a.title || a.url)}</a>` +
+        (a.snippet ? `<div style="color:${CLIP.c_sub};font-style:italic;margin-top:2px;padding-left:1.5em;">"${escapeHtmlSafe(a.snippet)}"</div>` : "") +
+        `${verified}</div>`
+      );
+    }).join("");
+    sections.push(
+      `<div style="margin-top:16px;padding:20px 24px;background:${CLIP.c_card};` +
+      `border:1px solid ${CLIP.c_border};border-radius:16px;">` +
+      `<h3 style="margin:0 0 12px;font-size:13px;font-weight:600;color:${CLIP.c_sub};` +
+      `text-transform:uppercase;letter-spacing:0.04em;">Sources (from web research)</h3>` +
+      `<div>${linksHtml}</div>` +
+      `</div>`
+    );
   }
 
   // Meta + Disclaimer
@@ -929,21 +1385,36 @@ function buildReportHtml(md, caveats) {
   const discHtml =
     `<div style="margin-top:12px;padding:12px 16px;background:${CLIP.c_discBg};border-radius:12px;` +
     `font-size:12px;line-height:1.5;color:${CLIP.c_sub};">` +
-    `<span style="display:inline-block;margin-right:4px;color:${CLIP.c_sub};font-size:14px;vertical-align:-2px;">${escapeHtmlSafe(ICON_GLYPH.info)}</span>` +
-    `This is general information based on publicly available sources as of ${escapeHtmlSafe(date)}. ` +
+    `ℹ️ This is general information based on publicly available sources as of ${escapeHtmlSafe(date)}. ` +
     `Visa requirements change frequently and are determined solely by the destination country's authorities. ` +
     `Always verify with the destination embassy or consulate before booking travel. ` +
     `<strong>Not legal advice. Not a substitute for an immigration attorney.</strong>` +
     `</div>`;
 
-  return clipWrap(statusHtml + sections.join("") + metaHtml + discHtml);
+  return (
+    `<div style="max-width:680px;margin:0 auto;${CLIP.font};color:${CLIP.c_text};line-height:1.5;">` +
+    statusHtml + sections.join("") + metaHtml + discHtml +
+    `</div>`
+  );
 }
 
-function buildReportText(md, caveats) {
+function buildReportText(md, caveats, annotations, critical) {
   const s    = parseSections(md);
   const meta = extractMeta(md);
+  const ann  = Array.isArray(annotations) ? annotations : [];
+  const crit = Array.isArray(critical)    ? critical   : [];
   const date = meta.lastVerified || new Date().toISOString().slice(0, 10);
   const out  = [];
+
+  if (ann.length === 0) {
+    out.push("⚠️ Web research did not return grounded sources — verify all claims with the destination embassy before booking.");
+  }
+  if (crit.length) {
+    const rows = crit.map((c, i) =>
+      `${i + 1}. [${(c.type || "step").toUpperCase()}] ${c.label}: ${c.value}${c.source ? ` — ${c.source}` : ""}`
+    );
+    out.push("BEFORE YOU BOOK\n" + rows.join("\n"));
+  }
 
   const push = (label, value) => {
     const v = (value || "").trim();
@@ -956,23 +1427,31 @@ function buildReportText(md, caveats) {
   push("Processing time",    s.processingTime);
 
   if (s.requiredDocs) {
+    const bodyOffset = findSectionOffset(md, titles.requiredDocs || "Required documents (typical)");
+    const localAnns = annotationsForBody(ann, bodyOffset);
+    const bullets = buildBulletCharMap(s.requiredDocs);
+    const mapWithAnn = attachUrlOnlyAnnotations(bullets, localAnns);
     const items = s.requiredDocs.split("\n")
       .map(l => l.replace(/^[-•*]\s+/, "").trim())
-      .filter(Boolean);
-    if (items.length) out.push("Required documents\n- " + items.join("\n- "));
+      .filter(Boolean)
+      .map((t, i) => {
+        const anns = dedupeByUrl((mapWithAnn[i]?.annotations || []).map(a => ({
+          ...a,
+          start: a._localStart ?? a.start,
+          end:   a._localEnd   ?? a.end,
+        })));
+        const links = anns.map(a => `  ↗ ${a.title || a.url} (${a.url})`).join("\n");
+        return `- ${t}${links ? "\n" + links : ""}`;
+      });
+    if (items.length) out.push("Required documents\n" + items.join("\n"));
   }
   push("Official application", s.officialUrl);
   push("Exception rules",       s.exceptions);
   push("Travel advisories",     s.advisories);
-  if (s.sources) {
-    const links = [];
-    s.sources.split("\n").forEach((line) => {
-      const m = line.match(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/);
-      if (m) links.push({ label: m[1], url: m[2] });
-    });
-    if (links.length) {
-      out.push("Sources\n" + links.map(l => `- ${l.label} (${l.url})`).join("\n"));
-    }
+
+  if (ann.length) {
+    const rows = ann.map(a => `- ${a.title || a.url}\n  ${a.url}${a.snippet ? `\n  "${a.snippet}"` : ""}`);
+    out.push("Sources (from web research)\n" + rows.join("\n"));
   }
   if (caveats && caveats.trim()) out.push("Caveats\n" + caveats.trim());
   out.push(`Last verified: ${date}`);
@@ -982,10 +1461,9 @@ function buildReportText(md, caveats) {
   return out.join("\n\n");
 }
 
-async function copyReport(md, caveats) {
-  const html = buildReportHtml(md, caveats);
-  const text = buildReportText(md, caveats);
-  // Modern: both blobs → rich text in mail/chat, plain text elsewhere.
+async function copyReport(md, caveats, annotations, critical) {
+  const html = buildReportHtml(md, caveats, annotations, critical);
+  const text = buildReportText(md, caveats, annotations, critical);
   if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
     try {
       await navigator.clipboard.write([

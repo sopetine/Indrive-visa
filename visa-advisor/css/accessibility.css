@@ -43,6 +43,108 @@ a:focus-visible {
   .btn { border: 2px solid CanvasText; }
   .btn--primary { background: Highlight; color: HighlightText; forced-color-adjust: none; }
   .btn--secondary { background: CanvasText; color: Canvas; forced-color-adjust: none; }
+
+  /* v0.3 — citation links + critical card survive forced-colors mode */
+  .cite-link {
+    background: Canvas;
+    color: LinkText;
+    border: 2px solid LinkText;
+    forced-color-adjust: none;
+  }
+  .cite-link--unverified,
+  .cite-link--unmapped {
+    background: Canvas;
+    color: Mark;
+    border-color: Mark;
+    forced-color-adjust: none;
+  }
+  .cite-tooltip {
+    background: Canvas;
+    color: CanvasText;
+    border: 2px solid CanvasText;
+    forced-color-adjust: none;
+  }
+  .cite-tooltip-source { color: LinkText; }
+  .cite-tooltip-quote { border-left-color: LinkText; }
+  .report-critical {
+    background: Canvas;
+    border: 2px solid CanvasText;
+    border-left-width: 6px;
+    forced-color-adjust: none;
+    color: CanvasText;
+  }
+  .report-critical-label,
+  .report-critical-value { color: CanvasText; }
+  .report-critical-source { color: LinkText; }
+  .critical-fact { border-left: 4px solid Mark; }
+  .report-source-item {
+    background: Canvas;
+    border: 2px solid CanvasText;
+    forced-color-adjust: none;
+  }
+  .report-source-index {
+    background: Highlight;
+    color: HighlightText;
+    forced-color-adjust: none;
+  }
+
+  /* v0.4 — verify links, before-you-book checklist, critical steps */
+  .verify-link {
+    background: Canvas;
+    color: LinkText;
+    border: 2px solid LinkText;
+    forced-color-adjust: none;
+  }
+  .critical-step-verify {
+    background: Canvas;
+    color: LinkText;
+    border: 2px solid LinkText;
+    forced-color-adjust: none;
+  }
+  .before-you-book {
+    background: Canvas;
+    border: 2px solid CanvasText;
+    forced-color-adjust: none;
+    color: CanvasText;
+  }
+  .critical-step {
+    background: Canvas;
+    border: 2px solid CanvasText;
+    forced-color-adjust: none;
+    color: CanvasText;
+  }
+  .critical-step--money,
+  .critical-step--entry    { border-left: 6px solid Mark; }
+  .critical-step--deadline { border-left: 6px solid GrayText; }
+  .critical-step--doc      { border-left: 6px solid LinkText; }
+  .critical-step--stale    { border-left: 6px solid GrayText; }
+  .critical-step-number    { background: Highlight; color: HighlightText; forced-color-adjust: none; }
+  .critical-step-icon      { background: Canvas; border: 1px solid CanvasText; forced-color-adjust: none; }
+  .critical-step-label,
+  .critical-step-value     { color: CanvasText; }
+  .report-unverified-banner {
+    background: Canvas;
+    border: 2px solid CanvasText;
+    border-left: 6px solid Mark;
+    forced-color-adjust: none;
+    color: CanvasText;
+  }
+  .critical-fact,
+  .report-section.is-critical {
+    border-left: 4px solid Mark;
+    background: Canvas;
+    forced-color-adjust: none;
+  }
+  .critical-fact--money,
+  .critical-fact--entry,
+  .report-section.is-critical--money,
+  .report-section.is-critical--entry    { border-left-color: Mark; }
+  .critical-fact--deadline,
+  .report-section.is-critical--deadline { border-left-color: GrayText; }
+  .critical-fact--doc,
+  .report-section.is-critical--doc      { border-left-color: LinkText; }
+  .critical-fact--stale,
+  .report-section.is-critical--stale    { border-left-color: GrayText; }
 }
 
 /* 5. High contrast user preference */

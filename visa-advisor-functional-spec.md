@@ -2,7 +2,7 @@
 
 > **Scope:** functional behavior for the responsive web app. Visual design is driven by a separate styleguide (to be applied later) and the inDrive-style UI requirement per the BRD. This spec describes **what** the app does, not **how** it looks.
 
-**Version:** v0.1 — companion to `visa-advisor-prompt.md` v0.2
+**Version:** v0.2 — companion to `visa-advisor-prompt.md` v0.4
 
 ---
 
@@ -28,7 +28,7 @@
 2. **First time only:** disclaimer modal appears. User must acknowledge ("I understand") to proceed. State persists in `localStorage` so the modal does not reappear unless the user clears site data or the disclaimer text changes.
 3. User lands on the main form (single screen).
 4. User selects nationality, destination, arrival date.
-5. User submits → app sends the query to the MiniMax API using the v0.2 system prompt.
+5. User submits → app sends the query to the MiniMax API using the v0.4 system prompt (via the OpenAI Responses API with server-side `web_search`).
 6. Loading state appears (functional placeholder; visual defined in styleguide).
 7. Structured report renders on screen.
 8. User can: edit inputs and re-query, copy the report, share via URL.
@@ -65,23 +65,24 @@
 | Field | Type | Required | Behavior |
 |---|---|---|---|
 | **Nationality** | Searchable dropdown | Yes | Lists ~250 passports; search by country name or ISO code; defaults to last-used value from `localStorage` |
-| **Destination** | Searchable dropdown | Yes | Lists ~250 countries; same search behavior; defaults to empty |
+| **From** | Searchable dropdown | Yes | Country the user is currently based in / will apply from. Same search behavior as nationality; used by the LLM for Schengen consulate-jurisdiction advice. |
+| **Destination** | Searchable dropdown | Yes | Destination city. LLM infers the destination country. |
 | **Arrival date** | Date picker | Yes | Constrained to today + 2 years forward; format YYYY-MM-DD; defaults to today |
-| **Transit country** | Searchable dropdown | No | Revealed by a toggle "Add layover?"; same list as destination |
+| **Transit country** | Searchable dropdown | No | Revealed by a toggle "Add layover?"; same list as From |
 | **Trip purpose** | Radio: `Leisure` / `Business` / `Family` / `Other` | No | Defaults to `Business`; influences the LLM prompt context |
 
 ### 3.2 Validation rules
 
-- Nationality ≠ destination (cannot select the same country for both).
+- All three required fields must be non-empty.
 - Arrival date must be today or later.
-- If nationality is on the sanctioned-jurisdiction list (Iran, North Korea, Syria, Crimea/DNR/LNR), the app shows a notice and disables submit, redirecting to the disclaimer about consulting a licensed attorney.
+- Sanctioned-destination detection moved to the LLM (it infers the country from the destination city). If destination is Iran / North Korea / Syria / Crimea / DNR / LNR, the LLM refuses in its response and surfaces a caveats entry recommending professional immigration counsel.
 
 ### 3.3 Submit behavior
 
 - Submit button is disabled until all required fields are valid.
-- On submit, the app sends the form values + the v0.2 system prompt to the MiniMax API.
+- On submit, the app sends the form values + the v0.4 system prompt to the MiniMax API.
 - Loading state appears within 100 ms (optimistic).
-- Request timeout: 60 seconds. On timeout, show retry option.
+- Request timeout: 120 seconds. Each query typically takes 30–90s because the LLM actually fetches pages via `web_search`.
 
 ---
 
@@ -89,20 +90,23 @@
 
 ### 4.1 Report structure
 
-The app renders the LLM response in the structured order defined in the v0.2 prompt:
+The app renders the LLM response in the structured order defined in the v0.4 prompt, with span-level `url_citation` annotations from the API attached to bullets:
 
 1. **Visa status** — large, prominent, single value (badge / pill / heading — style TBD)
-2. **Allowed stay** — supporting line
-3. **Passport validity rule** — supporting line
-4. **Fee** — supporting line with "verify on official site" caveat
-5. **Processing time** — supporting line with caveat
-6. **Required documents** — bulleted list
-7. **Official application URL** — primary CTA button (only if a `.gov` / official URL was provided)
-8. **Exception rules** — collapsible section (collapsed by default)
-9. **Travel advisories** — collapsible section (collapsed by default)
-10. **Last verified** — small footer line
-11. **Sources** — list of clickable markdown links
-12. **Disclaimer** — always present, at bottom
+2. **Before you book** — NEW color-coded numbered checklist (money / deadline / entry / doc / stale), each step with a verify link
+3. **Allowed stay** — supporting line
+4. **Passport validity rule** — supporting line
+5. **Fee** — typed `[MONEY]` critical (amber/red accent)
+6. **Processing time** — typed `[DEADLINE]` critical
+7. **Required documents** — bulleted list, each bullet ending with a "Verify on {source}" link to the URL the LLM actually read via web_search
+8. **Official application URL** — primary CTA button (only if a `.gov` / official URL was provided)
+9. **Exception rules** — collapsible section (collapsed by default), bullets with verify links
+10. **Travel advisories** — collapsible section (collapsed by default), bullets with verify links
+11. **Last verified** — small footer line
+12. **Sources** — annotated list with snippet excerpts
+13. **Disclaimer** — always present, at bottom
+
+Zero-annotation fallback: if `annotations[]` is empty (e.g. `web_search` tool was rejected and fell back to no-search mode), an amber "Web research did not return grounded sources" banner is shown above the report so the user knows to verify manually.
 
 ### 4.2 Caveats / uncertainty
 

@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#C1F11D">
   <meta name="color-scheme" content="light dark">
   <title>Visa Advisor — Instant visa requirements for any passport</title>
-  <meta name="description" content="Get current visa requirements for any nationality, arrival country, and destination city. Powered by authoritative public sources. Not legal advice.">
+  <meta name="description" content="Get current visa requirements for any passport, current residence, and destination city. Sourced from live Wikipedia, IATA, and official .gov sites via web search. Not legal advice.">
 
   <!-- Open Graph -->
   <meta property="og:title" content="Visa Advisor">
-  <meta property="og:description" content="Current visa requirements for any (nationality, arrival, destination). Free. Not legal advice.">
+  <meta property="og:description" content="Current visa requirements for any (passport, residence, destination). Free. Not legal advice.">
   <meta property="og:type" content="website">
 
   <!-- Fonts -->
@@ -58,7 +58,7 @@
             <mark class="hl">in seconds.</mark>
           </h1>
           <p class="form-subtitle">
-            Enter your passport and arrival country. Get the visa status, allowed stay, fees, processing time, and required documents — sourced from Wikipedia, IATA, and official <code>.gov</code> sites.
+            Enter your passport, where you're based, and where you're going. Get the visa status, allowed stay, fees, processing time, and required documents — researched live from Wikipedia, IATA, and official <code>.gov</code> sites. Every bullet links back to its verified source.
           </p>
         </header>
 
@@ -89,21 +89,21 @@
             <p class="field-error" data-error-for="nationality" hidden></p>
           </div>
 
-          <!-- Arrival + Destination in one row on >=540px -->
-          <div class="field-row" data-field-row="arr-dst">
-            <div class="field" data-field="arrival">
-              <label for="input-arrival" class="field-label">
-                Arrival <span class="req" aria-hidden="true">*</span>
+          <!-- From + Destination in one row on >=540px -->
+          <div class="field-row" data-field-row="from-dst">
+            <div class="field" data-field="from">
+              <label for="input-from" class="field-label">
+                From <span class="field-label--hint">— where you're based</span> <span class="req" aria-hidden="true">*</span>
               </label>
               <input
                 type="text"
-                id="input-arrival"
-                name="arrival"
+                id="input-from"
+                name="from"
                 class="text-input"
                 autocomplete="off"
                 placeholder="e.g. Georgia, Turkey…"
                 required>
-              <p class="field-error" data-error-for="arrival" hidden></p>
+              <p class="field-error" data-error-for="from" hidden></p>
             </div>
             <div class="field" data-field="destination">
               <label for="input-destination" class="field-label">
@@ -134,9 +134,9 @@
               placeholder="e.g. dual citizenship, layover in Istanbul, diplomatic passport…"></textarea>
           </div>
 
-          <!-- Sanctioned destination notice -->
+          <!-- Sanctioned destination notice (the LLM detects this from the destination city) -->
           <div class="notice notice--error" data-notice="sanctioned" hidden role="alert">
-            <strong>Arrival restricted.</strong>
+            <strong>Destination restricted.</strong>
             For Iran, North Korea, Syria, or Crimea / DNR / LNR, this tool does not provide visa guidance. Please consult a licensed immigration attorney.
           </div>
 
@@ -185,9 +185,12 @@
             </div>
           </div>
           <div class="action-bar-progress" data-action-bar-progress hidden aria-hidden="true">
+            <div class="action-bar-progress-live" data-progress-label aria-live="polite">
+              Researching your route…
+            </div>
             <div class="action-bar-progress-row">
               <span class="action-bar-progress-step is-active" data-progress-step="prompt">Loading advisor knowledge base</span>
-              <span class="action-bar-progress-step" data-progress-step="consult">Consulting sources</span>
+              <span class="action-bar-progress-step" data-progress-step="consult">Consulting sources via web search</span>
               <span class="action-bar-progress-step" data-progress-step="compile">Compiling report</span>
             </div>
             <div class="action-bar-progress-track">

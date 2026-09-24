@@ -17,7 +17,7 @@
 
 const API_ENDPOINT       = "https://visa-advisor.sopetine.workers.dev";
 const SYSTEM_PROMPT_URL  = "./visa-advisor-prompt.md";
-const REQUEST_TIMEOUT_MS = 60_000;
+const REQUEST_TIMEOUT_MS = 120_000;  // web_search can take 30-90s per query
 
 let _promptCache = null;
 
@@ -40,9 +40,9 @@ async function loadSystemPrompt() {
 
 /**
  * @typedef {Object} QueryInput
- * @property {string} nationality
- * @property {string} arrival
- * @property {string} destination
+ * @property {string} nationality   passport (e.g. "Russian")
+ * @property {string} from          current residence / where user is based (e.g. "Georgia")
+ * @property {string} destination   destination city (e.g. "Munich")
  * @property {string} date          YYYY-MM-DD
  * @property {string} purpose
  * @property {string} [comments]

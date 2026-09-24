@@ -3,7 +3,7 @@ main = "src/index.js"
 compatibility_date = "2025-09-23"
 
 [vars]
-LLM_ENDPOINT  = "https://api.minimax.io/v1/chat/completions"
+LLM_ENDPOINT  = "https://api.minimax.io/v1/responses"
 LLM_MODEL     = "MiniMax-M3"
 ALLOWED_ORIGIN = "https://sopetine.github.io"
 

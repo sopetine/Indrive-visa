@@ -48,7 +48,12 @@ function start() {
   function showForm(prefill = {}) {
     reportApi.el.hidden = true;
     document.querySelector('[data-view="form"]').hidden = false;
-    if (prefill.nat)  formApi.setFormData({ nationality: prefill.nat, arrival: prefill.arr, destination: prefill.dst, comments: prefill.comments });
+    if (prefill.nat) formApi.setFormData({
+      nationality: prefill.nat,
+      from:        prefill.from,
+      destination: prefill.dst,
+      comments:    prefill.comments,
+    });
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 
@@ -56,24 +61,30 @@ function start() {
     document.querySelector('[data-view="form"]').hidden = true;
     reportApi.el.hidden = false;
 
+    // Migration shim: legacy URLs use ?arr= (old "arrival" field), legacy
+    // localStorage payloads use { arrival }. Map both to `from`.
+    const from = params.from || params.arr || "";
+
     const input = {
       nationality: params.nat,
-      arrival:     params.arr,
+      from:        from,
       destination: params.dst,
       date:        new Date().toISOString().slice(0, 10),
       purpose:     "business",
     };
     if (params.comments) input.comments = params.comments;
 
-    if (input.nationality && input.arrival) {
-      reportApi.setRoute(input.nationality, input.arrival, input.destination);
+    if (input.nationality && input.from) {
+      reportApi.setRoute(input.nationality, input.from, input.destination);
       reportApi.runQuery(input);
     } else {
       const cached = sessionStorage.getItem("visa-advisor.last-input")
                   || localStorage.getItem("visa-advisor.last-input");
       if (cached) {
         const parsed = JSON.parse(cached);
-        reportApi.setRoute(parsed.nationality, parsed.arrival, parsed.destination);
+        // Migration shim for legacy cached shape { arrival } → { from }.
+        if (parsed && !parsed.from && parsed.arrival) parsed.from = parsed.arrival;
+        reportApi.setRoute(parsed.nationality, parsed.from, parsed.destination);
         reportApi.runQuery(parsed);
       } else {
         navigate("/", "");
@@ -94,7 +105,7 @@ function start() {
   function serialize(input) {
     const p = new URLSearchParams();
     if (input.nationality) p.set("nat", input.nationality);
-    if (input.arrival)     p.set("arr", input.arrival);
+    if (input.from)        p.set("from", input.from);
     if (input.destination) p.set("dst", input.destination);
     if (input.comments)    p.set("comments", input.comments);
     return p.toString();
