@@ -40,7 +40,13 @@
    ============================================================ */
 
 const ALLOWED_ORIGIN_DEFAULT = "https://sopetine.github.io";
-const MIN_SOURCES = 15;  // enforced minimum distinct URLs in sources[]
+const MIN_SOURCES = 15;       // floor when no server (Tavily) search ran at all
+const SOFT_MIN_SOURCES = 8;   // floor when server search ran but came up thin
+                               // (e.g. the shared timeout killed most queries) —
+                               // "drop Tier-1 floor" removed the only floor that
+                               // used to apply once Tavily returned anything, so
+                               // a run with just 1-2 sources looked "authoritative"
+                               // with no signal to the user that research was shallow.
 
 export default {
   async fetch(request, env) {
@@ -167,27 +173,33 @@ export default {
 
     let parsed = parseContract(data, serverSearchSources, tavilyRawResults);
 
-    // Deep-research enforcement (v0.5): if the report has < MIN_SOURCES
-    // distinct URLs in sources[] AND web_search is available, retry once
-    // with an explicit "do more searches" reminder appended to the user
-    // message. Cap retries at 1 to bound latency.
-    // v0.7.2 (L7): skip the retry path entirely when Tier 1 server search
-    // already returned authoritative sources — the LLM-only retry prompt
-    // is moot.
+    // Deep-research enforcement (v0.5, softened in v0.8): if the report
+    // came up short of the applicable floor AND web_search is available,
+    // retry once with an explicit "do more searches" reminder appended to
+    // the user message. Cap retries at 1 to bound latency.
+    //
+    // The floor is MIN_SOURCES (15) when no server (Tavily) search ran at
+    // all — the old unaided-LLM bar. When Tavily did run, the bar drops to
+    // SOFT_MIN_SOURCES (8): Tavily-backed sources are more reliable per
+    // source, but a thin Tavily run (e.g. most queries timed out) should
+    // still trigger a retry rather than being treated as "authoritative"
+    // just because serverSearchSources was non-empty.
+    const floor = serverSearchSources.length ? SOFT_MIN_SOURCES : MIN_SOURCES;
     if (
       webSearchAvailable &&
-      !serverSearchSources.length &&
       parsed.type === "report" &&
-      (parsed.sourcesReturned || 0) < MIN_SOURCES
+      (parsed.sourcesReturned || 0) < floor
     ) {
       const reminder =
         `\n\nREMINDER (round 2): your previous attempt returned only ` +
         `${parsed.sourcesReturned || 0} distinct sources. The contract ` +
-        `requires ≥${MIN_SOURCES}. You MUST issue additional web searches ` +
+        `requires ≥${floor}. You MUST issue additional web searches ` +
         `covering categories you missed (recent rule changes, transit rules, ` +
         `reciprocity fees, sanctions pages, IATA matrix, official eVisa ` +
-        `portal). Re-emit the JSON envelope with the full searchQueries[] ` +
-        `(now 10–12 entries) and sources[] (now ≥${MIN_SOURCES} entries).`;
+        `portal). Re-emit the full JSON envelope exactly as specified in the ` +
+        `system prompt — the same field names, the same \`### \` heading ` +
+        `contract for \`markdown\` — with searchQueries[] (now 10–12 entries) ` +
+        `and sources[] (now ≥${floor} entries).`;
       const retryMsg = userMessage + reminder;
       const retryUpstream = await callUpstream(env, requestBody(true, retryMsg));
       if (retryUpstream.ok) {
@@ -201,15 +213,9 @@ export default {
     }
 
     // Attach a warning if we still came up short after the retry attempt.
-    // v0.7.2 (L7): when Tier 1 server search ran, sources are server-validated
-    // so the legacy "≥15 sources" floor no longer applies — skip the warning.
-    if (
-      parsed.type === "report" &&
-      (parsed.sourcesReturned || 0) < MIN_SOURCES &&
-      !serverSearchSources.length
-    ) {
+    if (parsed.type === "report" && (parsed.sourcesReturned || 0) < floor) {
       parsed.researchWarning =
-        `Only ${parsed.sourcesReturned || 0} of ${MIN_SOURCES} required sources ` +
+        `Only ${parsed.sourcesReturned || 0} of ${floor} required sources ` +
         `were retrieved. Verify all claims manually with the destination embassy ` +
         `before booking travel.`;
     }

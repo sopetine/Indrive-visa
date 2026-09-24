@@ -964,7 +964,12 @@ function renderSourcesSection(sources, citedUrls) {
 /* v0.7.1 — L3 reachability probe.
    - Concurrency cap 5, per-request timeout 3s.
    - Uses fetch({method:'HEAD', mode:'no-cors'}) so opaque responses
-     bypass CORS preflight but we still observe success/error.
+     bypass CORS preflight — but `no-cors` also means we can never read
+     the actual HTTP status. A 404/500 behind CORS still resolves the
+     fetch promise (it just can't be inspected), so "ok" here only means
+     "something answered the connection," not "verified 200 OK." The
+     labels below are worded to reflect that rather than overstate
+     confidence.
    - Updates each row's [data-reach] span and the summary line. */
 async function verifySources(sectionEl, sources) {
   const rows = Array.from(sectionEl.querySelectorAll(".report-source-tag[data-source-url]"));
@@ -973,8 +978,8 @@ async function verifySources(sectionEl, sources) {
 
   function tally() {
     if (summary) summary.textContent =
-      `Reachability: ${counts.ok} / ${sources.length} sources OK · ` +
-      `${counts.err} failed · ${counts.warn} uncertain`;
+      `Reachability: ${counts.ok} / ${sources.length} sources responded · ` +
+      `${counts.err} failed to connect · ${counts.warn} timed out`;
   }
   tally();
 
@@ -988,7 +993,7 @@ async function verifySources(sectionEl, sources) {
     const timer = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT_MS);
     try {
       await fetch(url, { method: "HEAD", mode: "no-cors", signal: ctrl.signal, cache: "no-store" });
-      return "ok";          // opaqueresponse.ok is impossible to read; assume ok on no throw
+      return "ok";          // opaque response, status unreadable — "responded", not "verified 200"
     } catch (err) {
       if (err && err.name === "AbortError") return "warn";
       return "err";         // DNS / network / CORS preflight failure
@@ -996,6 +1001,8 @@ async function verifySources(sectionEl, sources) {
       clearTimeout(timer);
     }
   }
+
+  const REACH_LABEL = { ok: "Responded (status unverifiable via CORS)", warn: "Timed out", err: "Failed to connect" };
 
   async function pump() {
     while (queue.length) {
@@ -1008,8 +1015,8 @@ async function verifySources(sectionEl, sources) {
         const dot = next.row.querySelector("[data-reach]");
         if (dot) {
           dot.dataset.reach = status;
-          dot.setAttribute("aria-label", `Reachability: ${status}`);
-          dot.title = `Reachability: ${status}`;
+          dot.setAttribute("aria-label", REACH_LABEL[status] || status);
+          dot.title = REACH_LABEL[status] || status;
         }
         counts.pending--;
         counts[status] = (counts[status] || 0) + 1;
