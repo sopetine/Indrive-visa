@@ -275,7 +275,7 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
   }
 
   // Zero-annotation banner (top of report, above checklist)
-  if (ann.length === 0) {
+  if (ann.length === 0 && !research?.serverSearchAvailable) {
     body.appendChild(renderUnverifiedBanner());
   }
 
