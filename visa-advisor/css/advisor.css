@@ -717,6 +717,19 @@
   color: var(--main-dark);
   line-height: var(--lh-ml);
 }
+.report-raw-markdown {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--surface-light, #fff);
+  border-radius: 6px;
+  font-family: var(--font-family-mono);
+  font-size: var(--fs-sm, 13px);
+  line-height: var(--lh-ml);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 480px;
+  overflow-y: auto;
+}
 .report-section-value--list {
   list-style: none;
   padding: 0;
