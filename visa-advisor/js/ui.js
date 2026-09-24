@@ -1113,9 +1113,6 @@ function renderBeforeYouBook(critical, sections, annotations) {
       <span class="material-symbols-outlined" aria-hidden="true">priority_high</span>
       Before you book
     </h2>
-    <p class="before-you-book-intro">
-      Confirm each item below before paying for non-refundable travel.
-    </p>
     <ol class="before-you-book-list">${items}</ol>
   `;
   return wrap;
@@ -1176,10 +1173,14 @@ function renderBulletSection(rawTitle, iconName, md, annotations, opts = {}) {
     // Highlight key tokens (Schengen, ETA, $XX USD, 15 days, etc.)
     const html = hl(body);
     if (html.includes("<mark")) {
-      // Insert as innerHTML (already escaped + wrapped in <mark>)
+      // Insert as innerHTML (already escaped + wrapped in <mark>). Kept as a
+      // single wrapping span — the li is a flex container (for the bullet
+      // dot), and unwrapping this into multiple top-level text/mark nodes
+      // would turn each of them into its own flex item, breaking text flow
+      // into narrow per-word columns.
       const span = document.createElement("span");
       span.innerHTML = html;
-      while (span.firstChild) li.appendChild(span.firstChild);
+      li.appendChild(span);
     } else {
       li.appendChild(document.createTextNode(body));
     }
@@ -1851,6 +1852,7 @@ function escapeHtmlSafe(s) {
 
 function buildReportHtml(md, caveats, annotations, critical, research) {
   const s       = parseSections(md);
+  const titles  = s.__titles || {};
   const meta    = extractMeta(md);
   const ann     = Array.isArray(annotations) ? annotations : [];
   const crit    = Array.isArray(critical)    ? critical   : [];
@@ -2089,7 +2091,8 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
 }
 
 function buildReportText(md, caveats, annotations, critical, research) {
-  const s    = parseSections(md);
+  const s      = parseSections(md);
+  const titles = s.__titles || {};
   const meta = extractMeta(md);
   const ann  = Array.isArray(annotations) ? annotations : [];
   const crit = Array.isArray(critical)    ? critical   : [];

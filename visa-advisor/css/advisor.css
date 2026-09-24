@@ -39,12 +39,6 @@
   font-size: 18px;
   line-height: 1;
 }
-.icon-chip--visa-free  { background: var(--main-green); }
-.icon-chip--eta        { background: var(--light-green); }
-.icon-chip--evisa      { background: var(--information-light-airlight);    color: var(--information-dark-airdark); }
-.icon-chip--voa        { background: var(--information-light-earthlight);  color: var(--information-dark-earthdark); }
-.icon-chip--embassy    { background: var(--information-light-chicklight);  color: var(--information-dark-chickdark); }
-.icon-chip--restricted { background: var(--information-light-crablight);   color: var(--information-dark-crabdark); }
 .icon-chip--warn       { background: var(--extensions-background-lightwarning); color: var(--information-dark-chickdark); }
 .icon-chip--neutral    { background: var(--soft-beige); }
 .icon-chip--accent     { background: transparent; color: var(--text-and-icon-accent); }
@@ -441,9 +435,7 @@
 .action-bar {
   position: sticky;
   top: 0;
-  left: 50%;
-  width: 100vw;
-  margin-left: -50vw;
+  width: 100%;
   margin-bottom: var(--sp-4);
   z-index: 50;
   background: rgba(255, 255, 255, 0.92);
@@ -650,18 +642,7 @@
   border-radius: var(--r-5);
   transition: box-shadow var(--dur-base) var(--ease);
 }
-.report-status--visa-free  { background: var(--main-green);                     border-color: var(--main-green); }
-.report-status--eta        { background: var(--light-green);                   border-color: var(--light-green); }
-.report-status--evisa      { background: var(--information-light-airlight);    border-color: var(--information-light-airlight); }
-.report-status--voa        { background: var(--information-light-earthlight);  border-color: var(--information-light-earthlight); }
-.report-status--embassy    { background: var(--information-light-chicklight);  border-color: var(--information-light-chicklight); }
-.report-status--restricted { background: var(--extensions-background-lighterror); border-color: var(--extensions-background-lighterror); }
-.report-status--visa-free:hover,
-.report-status--eta:hover,
-.report-status--evisa:hover,
-.report-status--voa:hover,
-.report-status--embassy:hover,
-.report-status--restricted:hover {
+.report-status:hover {
   box-shadow: var(--shadow-m);
 }
 .status-badge {
@@ -679,18 +660,12 @@
   white-space: normal;
   line-height: 1.2;
 }
-.status-badge--visa-free     { background: var(--main-green);              color: var(--main-dark); }
-.status-badge--eta           { background: var(--light-green);             color: var(--main-dark); }
-.status-badge--evisa         { background: var(--information-light-airlight); color: var(--information-dark-airdark); }
-.status-badge--voa           { background: var(--information-light-earthlight); color: var(--information-dark-earthdark); }
-.status-badge--embassy       { background: var(--information-light-chicklight); color: var(--information-dark-chickdark); }
-.status-badge--restricted    { background: var(--extensions-background-lighterror); color: var(--extensions-text-and-icon-error); }
-.status-badge .icon-chip { width: 32px; height: 32px; }
-.status-badge .icon-chip .material-symbols-outlined { font-size: 20px; }
-/* When the whole card takes the status color, the inner badge becomes a frosted chip on top of it */
-[class*="report-status--"] .status-badge {
-  background: rgba(255, 255, 255, 0.55);
+.status-badge {
+  background: var(--main-green);
+  color: var(--main-dark);
 }
+.status-badge .icon-chip { width: 32px; height: 32px; background: rgba(255, 255, 255, 0.55); color: inherit; }
+.status-badge .icon-chip .material-symbols-outlined { font-size: 20px; }
 
 .status-stay {
   text-align: right;
@@ -1137,11 +1112,11 @@
   line-height: 1;
 }
 .critical-title-glyph--money,
-.critical-title-glyph--default { color: var(--information-medium-crab); }
-.critical-title-glyph--deadline { color: var(--information-dark-chickdark); }
-.critical-title-glyph--entry    { color: var(--information-dark-crabdark); }
-.critical-title-glyph--doc      { color: var(--information-dark-whaledark); }
-.critical-title-glyph--stale    { color: var(--information-dark-pandadark); }
+.critical-title-glyph--deadline,
+.critical-title-glyph--entry,
+.critical-title-glyph--doc,
+.critical-title-glyph--stale,
+.critical-title-glyph--default { color: var(--main-dark, #141414); }
 
 /* ----- Citation link (inline [N]) ----- */
 .cite-link {
@@ -1511,10 +1486,11 @@ li[data-critical-type] .verify-link {
 .before-you-book {
   margin-top: var(--sp-5);
   padding: 20px 24px 22px;
-  background: var(--soft-beige);
-  border: 0;
-  border-radius: var(--r-4);
-  color: #4A3500;
+  background: var(--main-white);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--r-5);
+  box-shadow: var(--shadow-s);
+  color: var(--text-and-icon-primary);
 }
 .before-you-book-title {
   margin: 0 0 6px;
@@ -1526,18 +1502,11 @@ li[data-critical-type] .verify-link {
   font-weight: var(--fw-bold, 700);
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #6B4900;
+  color: var(--text-and-icon-primary);
 }
 .before-you-book-title .material-symbols-outlined {
   font-size: 22px;
-  color: #B45309;
-}
-.before-you-book-intro {
-  margin: 0 0 14px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: #6B4900;
-  opacity: 0.9;
+  color: var(--main-dark, #141414);
 }
 .before-you-book-list {
   list-style: none;
@@ -1555,7 +1524,8 @@ li[data-critical-type] .verify-link {
   align-items: center;
   padding: 12px 14px;
   background: var(--main-white);
-  border: 1px solid rgba(255, 193, 60, 0.30);
+  border: 1px solid var(--border-primary);
+  border-left: 4px solid var(--main-green);
   border-radius: var(--r-3);
   box-shadow: none;
 }
@@ -1582,11 +1552,14 @@ li[data-critical-type] .verify-link {
 .critical-step-icon .material-symbols-outlined {
   font-size: 20px;
 }
-.critical-step-icon.icon-chip--critical-money    { background: var(--information-light-crablight); color: var(--information-dark-crabdark); }
-.critical-step-icon.icon-chip--critical-deadline { background: var(--information-light-chicklight); color: var(--information-dark-chickdark); }
-.critical-step-icon.icon-chip--critical-entry    { background: var(--information-light-crablight); color: var(--information-dark-crabdark); }
-.critical-step-icon.icon-chip--critical-doc      { background: var(--information-light-whalelight); color: var(--information-dark-whaledark); }
-.critical-step-icon.icon-chip--critical-stale    { background: var(--information-light-pandalight); color: var(--information-dark-pandadark); }
+.critical-step-icon.icon-chip--critical-money,
+.critical-step-icon.icon-chip--critical-deadline,
+.critical-step-icon.icon-chip--critical-entry,
+.critical-step-icon.icon-chip--critical-doc,
+.critical-step-icon.icon-chip--critical-stale {
+  background: rgba(193, 241, 29, 0.22);
+  color: var(--main-dark, #141414);
+}
 
 .critical-step-label {
   font-size: 11px;
@@ -1662,13 +1635,6 @@ li[data-critical-type] .verify-link {
   outline: none;
 }
 
-/* Per-type left border accent on each step card */
-.critical-step--money    { border-left: 4px solid var(--information-medium-crab); }
-.critical-step--deadline { border-left: 4px solid var(--information-medium-chick); }
-.critical-step--entry    { border-left: 4px solid var(--information-medium-crab); }
-.critical-step--doc      { border-left: 4px solid var(--information-medium-whale); }
-.critical-step--stale    { border-left: 4px solid var(--information-medium-panda); }
-
 /* Mobile: critical-step grid collapses */
 @media (max-width: 539px) {
   .critical-step {
@@ -1693,41 +1659,26 @@ li[data-critical-type] .verify-link {
 
 /* ----- Section-level typed critical accent (driven by heading 🚨 [TYPE] prefix) ----- */
 .report-section.is-critical {
-  border: 1px solid var(--extensions-border-warning);
-  border-left: 4px solid var(--extensions-border-warning);
+  border: 1px solid var(--border-primary);
+  border-left: 4px solid var(--main-green);
   border-radius: var(--r-2, 12px);
   padding: var(--sp-4);
-  background: rgba(255, 241, 192, 0.16);
+  background: var(--main-white);
 }
-.report-section.is-critical--money    { border-color: var(--information-medium-crab); border-left-color: var(--information-medium-crab); background: var(--information-light-crablight); }
-.report-section.is-critical--deadline { border-color: var(--information-medium-chick); border-left-color: var(--information-medium-chick); background: var(--information-light-chicklight); }
-.report-section.is-critical--entry    { border-color: var(--information-medium-crab); border-left-color: var(--information-medium-crab); background: var(--information-light-crablight); }
-.report-section.is-critical--doc      { border-color: var(--information-medium-whale); border-left-color: var(--information-medium-whale); background: var(--information-light-whalelight); }
-.report-section.is-critical--stale    { border-color: var(--information-medium-panda); border-left-color: var(--information-medium-panda); background: var(--information-light-pandalight); }
 
 .report-section.is-critical .report-section-title {
-  color: var(--information-dark-chickdark, #8C5C00);
+  color: var(--text-and-icon-primary);
 }
-.report-section.is-critical--money    .report-section-title { color: var(--information-dark-crabdark); }
-.report-section.is-critical--deadline .report-section-title { color: var(--information-dark-chickdark); }
-.report-section.is-critical--entry    .report-section-title { color: var(--information-dark-crabdark); }
-.report-section.is-critical--doc      .report-section-title { color: var(--information-dark-whaledark); }
-.report-section.is-critical--stale    .report-section-title { color: var(--information-dark-pandadark); }
 
 /* Inline critical-fact bullets inside docs/exceptions/advisories */
 .critical-fact {
   position: relative;
   padding: var(--sp-2) var(--sp-3);
-  border-left: 3px solid var(--extensions-border-warning);
-  background: rgba(255, 241, 192, 0.30);
+  border-left: 3px solid var(--main-green);
+  background: rgba(193, 241, 29, 0.14);
   border-radius: 0 var(--r-1, 6px) var(--r-1, 6px) 0;
   list-style: none;
 }
-.critical-fact--money    { border-left-color: var(--information-medium-crab); background: var(--information-light-crablight); }
-.critical-fact--deadline { border-left-color: var(--information-medium-chick); background: var(--information-light-chicklight); }
-.critical-fact--entry    { border-left-color: var(--information-medium-crab); background: var(--information-light-crablight); }
-.critical-fact--doc      { border-left-color: var(--information-medium-whale); background: var(--information-light-whalelight); }
-.critical-fact--stale    { border-left-color: var(--information-medium-panda); background: var(--information-light-pandalight); }
 
 /* ----- Progress strip live label (rotating message) ----- */
 .action-bar-progress-live {
@@ -1768,7 +1719,6 @@ li[data-critical-type] .verify-link {
   .site-header--advisor { background: #1A1A1A; border-bottom-color: #2A2A2A; }
   .site-header--advisor .logo,
   .form-intro h1,
-  .status-badge,
   .status-stay-value,
   .report-section-value,
   .modal-header h2,
@@ -1822,19 +1772,8 @@ li[data-critical-type] .verify-link {
   .radio:has(input:checked) { border-color: var(--main-green); }
 
   .disclosure-panel { background: #0F0F0F; }
-  .report-status .status-badge--visa-free     { background: var(--main-green);              color: var(--main-dark); }
-  .report-status .status-badge--eta           { background: var(--main-dark-bg);            color: var(--main-white); }
-  .report-status .status-badge--evisa         { background: #0A2540;                        color: #6CB6FF; }
-  .report-status .status-badge--voa           { background: #1F3A0A;                        color: #8FD858; }
-  .report-status .status-badge--embassy       { background: #3F2E0A;                        color: #FFCB66; }
-  .report-status .status-badge--restricted    { background: #3F1212;                        color: #FF8A85; }
+  .status-badge .icon-chip { background: rgba(255, 255, 255, 0.12); }
 
-  .icon-chip--visa-free  { background: var(--main-green); color: var(--main-dark); }
-  .icon-chip--eta        { background: var(--main-dark-bg); color: var(--main-white); }
-  .icon-chip--evisa      { background: #0A2540; color: #6CB6FF; }
-  .icon-chip--voa        { background: #1F3A0A; color: #8FD858; }
-  .icon-chip--embassy    { background: #3F2E0A; color: #FFCB66; }
-  .icon-chip--restricted { background: #3F1212; color: #FF8A85; }
   .icon-chip--warn       { background: #3F2E0A; color: #FFCB66; }
   .icon-chip--neutral    { background: #2A2A2A; color: #F5F5F6; }
   .icon-chip--accent     { background: transparent; color: #6CB6FF; }
@@ -1881,15 +1820,6 @@ li[data-critical-type] .verify-link {
   .report-critical-empty { color: #FFCB66; opacity: 1; }
   .report-critical-value { color: #F5F5F6; }
   .report-critical-source { color: #8AB4F8; }
-
-  .report-section.is-critical {
-    background: rgba(255, 193, 60, 0.06);
-    border-color: rgba(255, 193, 60, 0.45);
-    border-left-color: #FFC13C;
-  }
-  .report-section.is-critical .report-section-title { color: #FFCB66; }
-
-  .critical-fact { background: rgba(255, 193, 60, 0.08); border-left-color: #FFC13C; }
 
   .cite-link {
     color: #8AB4F8;
@@ -1948,26 +1878,29 @@ li[data-critical-type] .verify-link {
   }
 
   .before-you-book {
-    background: linear-gradient(135deg, rgba(255, 193, 60, 0.12) 0%, rgba(255, 193, 60, 0.06) 100%);
-    border-color: rgba(255, 193, 60, 0.45);
-    color: #FFCB66;
+    background: #1A1A1A;
+    border-color: #2A2A2A;
+    color: #F5F5F6;
     box-shadow: none;
   }
-  .before-you-book-title { color: #FFCB66; }
-  .before-you-book-title .material-symbols-outlined { color: #FFCB66; }
-  .before-you-book-intro { color: #FFCB66; opacity: 0.9; }
+  .before-you-book-title { color: #F5F5F6; }
+  .before-you-book-title .material-symbols-outlined { color: var(--main-green); }
 
   .critical-step {
     background: #1A1A1A;
-    border-color: rgba(255, 193, 60, 0.30);
+    border-color: #2A2A2A;
+    border-left-color: var(--main-green);
     box-shadow: none;
   }
-  .critical-step-number { background: #FFCB66; color: #141414; }
-  .critical-step-icon.icon-chip--critical-money    { background: rgba(255, 99, 99, 0.18); color: #FF8B6B; }
-  .critical-step-icon.icon-chip--critical-deadline { background: rgba(255, 193, 60, 0.20); color: #FFCB66; }
-  .critical-step-icon.icon-chip--critical-entry    { background: rgba(255, 99, 99, 0.22); color: #FF8B6B; }
-  .critical-step-icon.icon-chip--critical-doc      { background: rgba(96, 165, 250, 0.20); color: #93C5FD; }
-  .critical-step-icon.icon-chip--critical-stale    { background: rgba(156, 163, 175, 0.20); color: #D1D5DB; }
+  .critical-step-number { background: var(--main-green); color: var(--main-dark); }
+  .critical-step-icon.icon-chip--critical-money,
+  .critical-step-icon.icon-chip--critical-deadline,
+  .critical-step-icon.icon-chip--critical-entry,
+  .critical-step-icon.icon-chip--critical-doc,
+  .critical-step-icon.icon-chip--critical-stale {
+    background: rgba(193, 241, 29, 0.16);
+    color: var(--main-green);
+  }
   .critical-step-label  { color: #9CA3AF; }
   .critical-step-value  { color: #F5F5F6; }
   .critical-step-verify {
@@ -1980,51 +1913,16 @@ li[data-critical-type] .verify-link {
     background: rgba(138, 180, 248, 0.20);
     border-color: #8AB4F8;
   }
-  .critical-step--money    { border-left-color: #FF8B6B; }
-  .critical-step--deadline { border-left-color: #FFCB66; }
-  .critical-step--entry    { border-left-color: #FF8B6B; }
-  .critical-step--doc      { border-left-color: #93C5FD; }
-  .critical-step--stale    { border-left-color: #9CA3AF; }
 
   .report-section.is-critical {
-    background: rgba(255, 193, 60, 0.06);
-    border-color: rgba(255, 193, 60, 0.45);
-    border-left-color: #FFCB66;
+    background: #1A1A1A;
+    border-color: #2A2A2A;
+    border-left-color: var(--main-green);
   }
-  .report-section.is-critical .report-section-title { color: #FFCB66; }
-  .report-section.is-critical--money,
-  .report-section.is-critical--entry {
-    background: rgba(255, 99, 99, 0.06);
-    border-color: rgba(255, 99, 99, 0.45);
-    border-left-color: #FF8B6B;
-  }
-  .report-section.is-critical--money .report-section-title,
-  .report-section.is-critical--entry .report-section-title { color: #FF8B6B; }
-  .report-section.is-critical--deadline {
-    background: rgba(255, 193, 60, 0.08);
-    border-color: rgba(255, 193, 60, 0.45);
-    border-left-color: #FFCB66;
-  }
-  .report-section.is-critical--deadline .report-section-title { color: #FFCB66; }
-  .report-section.is-critical--doc {
-    background: rgba(96, 165, 250, 0.06);
-    border-color: rgba(96, 165, 250, 0.45);
-    border-left-color: #93C5FD;
-  }
-  .report-section.is-critical--doc .report-section-title { color: #93C5FD; }
-  .report-section.is-critical--stale {
-    background: rgba(156, 163, 175, 0.06);
-    border-color: rgba(156, 163, 175, 0.45);
-    border-left-color: #9CA3AF;
-  }
-  .report-section.is-critical--stale .report-section-title { color: #9CA3AF; }
+  .report-section.is-critical .report-section-title { color: #F5F5F6; }
+  .critical-title-glyph { color: var(--main-green); }
 
-  .critical-fact { background: rgba(255, 193, 60, 0.08); border-left-color: #FFCB66; }
-  .critical-fact--money,
-  .critical-fact--entry { background: rgba(255, 99, 99, 0.10); border-left-color: #FF8B6B; }
-  .critical-fact--deadline { background: rgba(255, 193, 60, 0.12); border-left-color: #FFCB66; }
-  .critical-fact--doc { background: rgba(96, 165, 250, 0.10); border-left-color: #93C5FD; }
-  .critical-fact--stale { background: rgba(156, 163, 175, 0.10); border-left-color: #9CA3AF; }
+  .critical-fact { background: rgba(193, 241, 29, 0.10); border-left-color: var(--main-green); }
 
   .action-bar-progress-live { color: #FFCB66; }
   .action-bar-progress-live::before { background: #FFCB66; }

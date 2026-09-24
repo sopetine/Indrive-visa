@@ -155,47 +155,49 @@
 
     <!-- ===== REPORT VIEW ===== -->
     <section class="view view--report" data-view="report" aria-labelledby="report-title" hidden>
-      <div class="container container--narrow">
 
-        <!-- Sticky action bar -->
-        <div class="action-bar" data-action-bar>
-          <div class="action-bar-inner">
-            <div class="action-bar-row">
-              <div class="action-bar-route">
-                <span class="route-chip" data-report-from>—</span>
-                <span class="material-symbols-outlined route-arrow">arrow_forward</span>
-                <span class="route-chip route-chip--alt" data-report-to>—</span>
-              </div>
-              <div class="action-bar-buttons">
-                <button type="button" class="btn btn--outline btn--sm" data-action="edit">
-                  <span class="material-symbols-outlined btn-icon">edit</span>
-                  Edit
-                </button>
-                <button type="button" class="btn btn--outline btn--sm" data-action="copy">
-                  <span class="material-symbols-outlined btn-icon">content_copy</span>
-                  Copy
-                </button>
-                <button type="button" class="btn btn--primary btn--sm" data-action="share">
-                  <span class="material-symbols-outlined btn-icon">share</span>
-                  Share
-                </button>
-              </div>
+      <!-- Sticky action bar (full-bleed; direct child of the section so its
+           sticky positioning isn't constrained by container--narrow's padding) -->
+      <div class="action-bar" data-action-bar>
+        <div class="action-bar-inner">
+          <div class="action-bar-row">
+            <div class="action-bar-route">
+              <span class="route-chip" data-report-from>—</span>
+              <span class="material-symbols-outlined route-arrow">arrow_forward</span>
+              <span class="route-chip route-chip--alt" data-report-to>—</span>
             </div>
-            <div class="action-bar-progress" data-action-bar-progress hidden aria-hidden="true">
-              <div class="action-bar-progress-live" data-progress-label aria-live="polite">
-                Researching your route…
-              </div>
-              <div class="action-bar-progress-row">
-                <span class="action-bar-progress-step is-active" data-progress-step="prompt">Loading advisor knowledge base</span>
-                <span class="action-bar-progress-step" data-progress-step="consult">Consulting sources via web search</span>
-                <span class="action-bar-progress-step" data-progress-step="compile">Compiling report</span>
-              </div>
-              <div class="action-bar-progress-track">
-                <span class="action-bar-progress-fill" data-action-bar-progress-fill></span>
-              </div>
+            <div class="action-bar-buttons">
+              <button type="button" class="btn btn--outline btn--sm" data-action="edit">
+                <span class="material-symbols-outlined btn-icon">edit</span>
+                Edit
+              </button>
+              <button type="button" class="btn btn--outline btn--sm" data-action="copy">
+                <span class="material-symbols-outlined btn-icon">content_copy</span>
+                Copy
+              </button>
+              <button type="button" class="btn btn--primary btn--sm" data-action="share">
+                <span class="material-symbols-outlined btn-icon">share</span>
+                Share
+              </button>
+            </div>
+          </div>
+          <div class="action-bar-progress" data-action-bar-progress hidden aria-hidden="true">
+            <div class="action-bar-progress-live" data-progress-label aria-live="polite">
+              Researching your route…
+            </div>
+            <div class="action-bar-progress-row">
+              <span class="action-bar-progress-step is-active" data-progress-step="prompt">Loading advisor knowledge base</span>
+              <span class="action-bar-progress-step" data-progress-step="consult">Consulting sources via web search</span>
+              <span class="action-bar-progress-step" data-progress-step="compile">Compiling report</span>
+            </div>
+            <div class="action-bar-progress-track">
+              <span class="action-bar-progress-fill" data-action-bar-progress-fill></span>
             </div>
           </div>
         </div>
+      </div>
+
+      <div class="container container--narrow">
 
         <article class="report" data-report aria-live="polite">
 
