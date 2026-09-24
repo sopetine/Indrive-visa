@@ -1,5 +1,7 @@
 /* ============================================================
    UI — form, validation, modal, report rendering
+   v0.5 — deep-research renderer: Research log + Sources (N) sections,
+   per-report research meta line, partial-research warning banner.
    v0.4 — span-annotation renderer, "Before you book" checklist,
    per-bullet verify links, typed critical markers.
 
@@ -230,7 +232,7 @@ const CRITICAL_TYPE_META = {
 const CRITICAL_HEADING_RE = /^[\s\u00A0]*🚨(?:\s*\[(MONEY|DEADLINE|ENTRY|DOC|STALE)\])?\s*/i;
 
 /* ──────────────────────────────────────────────────────────
-   PUBLIC: renderReport(body, markdown, annotations, critical)
+   PUBLIC: renderReport(body, markdown, annotations, critical, caveats, research)
    ────────────────────────────────────────────────────────── */
 
 /**
@@ -244,18 +246,32 @@ const CRITICAL_HEADING_RE = /^[\s\u00A0]*🚨(?:\s*\[(MONEY|DEADLINE|ENTRY|DOC|S
  *                                          for the "Before you book" card.
  *                                          May be empty/undefined.
  * @param {string}      [caveats]    optional ⚠️ callout text
+ * @param {object}      [research]   v0.5 deep-research envelope:
+ *                                          { searchQueries: string[],
+ *                                            sources:       Array<{title,url,domain}>,
+ *                                            sourcesReturned: number,
+ *                                            researchWarning: string }
  */
-export function renderReport(body, markdown, annotations, critical, caveats) {
+export function renderReport(body, markdown, annotations, critical, caveats, research) {
   body.innerHTML = "";
 
-  const sections = parseSections(markdown);
-  const titles   = sections.__titles || {};
-  const ann      = Array.isArray(annotations) ? annotations : [];
-  const crit     = Array.isArray(critical)     ? critical   : [];
+  const sections  = parseSections(markdown);
+  const titles    = sections.__titles || {};
+  const ann       = Array.isArray(annotations) ? annotations : [];
+  const crit      = Array.isArray(critical)     ? critical   : [];
+  const searchQs  = Array.isArray(research?.searchQueries) ? research.searchQueries : [];
+  const sources   = Array.isArray(research?.sources)       ? research.sources       : [];
+  const meta      = extractMeta(markdown);
 
   // Status hero
   if (sections.visaStatus) {
     body.appendChild(renderStatus(sections.visaStatus, sections.allowedStay));
+  }
+
+  // Partial-research warning banner (v0.5) — above the zero-annotation banner
+  // so it's the very first thing the user sees when the worker came up short.
+  if (research?.researchWarning && research.researchWarning.trim()) {
+    body.appendChild(renderResearchWarning(research.researchWarning.trim(), research.sourcesReturned));
   }
 
   // Zero-annotation banner (top of report, above checklist)
@@ -298,12 +314,30 @@ export function renderReport(body, markdown, annotations, critical, caveats) {
     body.appendChild(renderBulletSection(titles.advisories || "Travel advisories", "campaign", sections.advisories, ann, { collapsible: true, fullMarkdown: markdown }));
   }
 
-  // Last verified
-  const meta = extractMeta(markdown);
-  if (meta.lastVerified) {
+  // Research log — every search query the LLM ran (v0.5)
+  if (searchQs.length) {
+    body.appendChild(renderResearchLog(searchQs));
+  }
+
+  // Sources (N) — deduped URLs grouped by domain (v0.5)
+  if (sources.length) {
+    body.appendChild(renderSourcesSection(sources));
+  }
+
+  // Last verified + research stats line
+  const metaLineParts = [];
+  if (meta.lastVerified)         metaLineParts.push(`Last verified: ${meta.lastVerified}`);
+  if (searchQs.length || sources.length || ann.length) {
+    metaLineParts.push(renderResearchMetaLine({
+      queries: searchQs.length,
+      sources: sources.length,
+      inlineCitations: ann.length,
+    }));
+  }
+  if (metaLineParts.length) {
     const meta_el = document.createElement("p");
     meta_el.className = "report-meta";
-    meta_el.textContent = `Last verified: ${meta.lastVerified}`;
+    meta_el.innerHTML = metaLineParts.join(" &nbsp;·&nbsp; ");
     body.appendChild(meta_el);
   }
 
@@ -533,6 +567,106 @@ function renderUnverifiedBanner() {
     </div>
   `;
   return el;
+}
+
+/* v0.5 — amber "research was partial" banner. Shown when the worker came
+   up short of the 15-distinct-source minimum even after the auto-retry. */
+function renderResearchWarning(message, sourcesReturned) {
+  const el = document.createElement("div");
+  el.className = "report-research-warning";
+  el.setAttribute("role", "alert");
+  const count = Number.isFinite(sourcesReturned) ? `${sourcesReturned} of 15` : "fewer than 15";
+  el.innerHTML = `
+    <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+    <div>
+      <strong>Research was partial — ${count} required sources were retrieved.</strong>
+      ${escapeHtml(message)}
+    </div>
+  `;
+  return el;
+}
+
+/* v0.5 — collapsible "Research log" section listing every search query the
+   LLM actually ran. Collapsed by default; user expands to inspect. */
+function renderResearchLog(queries) {
+  const sec = document.createElement("details");
+  sec.className = "report-section report-section--collapsible report-research-log";
+  sec.open = queries.length <= 8;  // small lists stay open; long lists collapse
+
+  const items = queries.map(q =>
+    `<li class="report-research-log-item">${escapeHtml(q)}</li>`
+  ).join("");
+
+  sec.innerHTML = `
+    <summary class="report-section-summary">
+      <h2 class="report-section-title">
+        <span class="icon-chip icon-chip--neutral" aria-hidden="true">
+          <span class="material-symbols-outlined">travel_explore</span>
+        </span>
+        Research log
+        <span class="report-section-count">${queries.length} ${queries.length === 1 ? "search" : "searches"}</span>
+      </h2>
+    </summary>
+    <ol class="report-research-log-list">${items}</ol>
+  `;
+  return sec;
+}
+
+/* v0.5 — "Sources (N)" section. Deduplicated URLs grouped by registrable
+   domain, each click-out link opens in a new tab. */
+function renderSourcesSection(sources) {
+  const grouped = groupSourcesByDomain(sources);
+  const groupKeys = Object.keys(grouped).sort();
+
+  const groupsHtml = groupKeys.map(domain => {
+    const items = grouped[domain].map(s => {
+      const title = (s.title || s.url || "").trim();
+      const safeTitle = escapeHtml(title);
+      const safeUrl = escapeHtmlAttr(s.url);
+      return `<li class="report-source-item">
+        <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="report-source-link">${safeTitle}</a>
+        <div class="report-source-url">${safeUrl}</div>
+      </li>`;
+    }).join("");
+    return `<div class="report-source-group">
+      <div class="report-source-domain">${escapeHtml(domain)}</div>
+      <ul class="report-source-list">${items}</ul>
+    </div>`;
+  }).join("");
+
+  const sec = document.createElement("section");
+  sec.className = "report-section report-sources";
+  sec.innerHTML = `
+    <h2 class="report-section-title">
+      <span class="icon-chip icon-chip--neutral" aria-hidden="true">
+        <span class="material-symbols-outlined">source</span>
+      </span>
+      Sources
+      <span class="report-section-count">${sources.length} ${sources.length === 1 ? "source" : "sources"}</span>
+    </h2>
+    <div class="report-source-groups">${groupsHtml}</div>
+  `;
+  return sec;
+}
+
+function groupSourcesByDomain(sources) {
+  const out = {};
+  for (const s of sources) {
+    const d = (s.domain || "").trim().toLowerCase() || "unknown";
+    if (!out[d]) out[d] = [];
+    out[d].push(s);
+  }
+  return out;
+}
+
+/* v0.5 — small meta-line fragment: "X searches · Y sources · Z citations". */
+function renderResearchMetaLine({ queries, sources, inlineCitations }) {
+  const parts = [];
+  if (queries)         parts.push(`<strong>${queries}</strong> ${queries === 1 ? "search" : "searches"}`);
+  if (sources)         parts.push(`<strong>${sources}</strong> ${sources === 1 ? "source" : "sources"}`);
+  if (inlineCitations) parts.push(`<strong>${inlineCitations}</strong> inline ${inlineCitations === 1 ? "citation" : "citations"}`);
+  if (!parts.length)   return "";
+  return `Research: ${parts.join(" · ")}`;
 }
 
 function renderBeforeYouBook(critical, sections, annotations) {
@@ -1025,7 +1159,13 @@ export function initReportView({ onEdit }) {
       return;
     }
     try {
-      const mode = await copyReport(root._lastMarkdown, root._lastCaveats, root._lastAnnotations, root._lastCritical);
+      const mode = await copyReport(
+        root._lastMarkdown,
+        root._lastCaveats,
+        root._lastAnnotations,
+        root._lastCritical,
+        root._lastResearch,
+      );
       announce(mode === "rich" ? "Rich-text report copied" : "Plain-text report copied");
       flashBtn(root.copyBtn, mode === "rich" ? "Copied!" : "Copied as text");
     } catch (err) {
@@ -1099,7 +1239,20 @@ export function initReportView({ onEdit }) {
       root._lastCaveats     = data.caveats;
       root._lastAnnotations = data.annotations || [];
       root._lastCritical    = data.critical     || [];
-      renderReport(root.body, data.markdown, root._lastAnnotations, root._lastCritical, root._lastCaveats);
+      root._lastResearch    = {
+        searchQueries: Array.isArray(data.searchQueries) ? data.searchQueries : [],
+        sources:       Array.isArray(data.sources)       ? data.sources       : [],
+        sourcesReturned: Number.isFinite(data.sourcesReturned) ? data.sourcesReturned : 0,
+        researchWarning: typeof data.researchWarning === "string" ? data.researchWarning : "",
+      };
+      renderReport(
+        root.body,
+        data.markdown,
+        root._lastAnnotations,
+        root._lastCritical,
+        root._lastCaveats,
+        root._lastResearch,
+      );
 
       // Brief beat so the user sees "Compiling your report" land before swap.
       await new Promise(r => setTimeout(r, 220));
@@ -1197,11 +1350,13 @@ function escapeHtmlSafe(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function buildReportHtml(md, caveats, annotations, critical) {
+function buildReportHtml(md, caveats, annotations, critical, research) {
   const s       = parseSections(md);
   const meta    = extractMeta(md);
   const ann     = Array.isArray(annotations) ? annotations : [];
   const crit    = Array.isArray(critical)    ? critical   : [];
+  const searchQs = Array.isArray(research?.searchQueries) ? research.searchQueries : [];
+  const sources  = Array.isArray(research?.sources)       ? research.sources       : [];
 
   // Status hero (compact for email).
   const normSt  = (s.visaStatus || "").trim().toLowerCase();
@@ -1358,30 +1513,70 @@ function buildReportHtml(md, caveats, annotations, critical) {
     );
   }
 
-  // Sources — list annotations.
-  if (ann.length) {
-    const linksHtml = ann.map(a => {
-      const verified = a.snippet ? "" : " <em>(no snippet)</em>";
+  // Research log — search queries the LLM ran (v0.5)
+  if (searchQs.length) {
+    const items = searchQs.map(q =>
+      `<li style="margin-top:4px;font-size:13px;color:${CLIP.c_sub};line-height:1.5;">${escapeHtmlSafe(q)}</li>`
+    ).join("");
+    sections.push(
+      `<div style="margin-top:16px;padding:20px 24px;background:${CLIP.c_card};` +
+      `border:1px solid ${CLIP.c_border};border-radius:16px;">` +
+      `<h3 style="margin:0 0 12px;font-size:13px;font-weight:600;color:${CLIP.c_sub};` +
+      `text-transform:uppercase;letter-spacing:0.04em;">Research log · ${searchQs.length} ${searchQs.length === 1 ? "search" : "searches"}</h3>` +
+      `<ol style="list-style:decimal inside;padding:0;margin:0;">${items}</ol>` +
+      `</div>`
+    );
+  }
+
+  // Sources (N) — deduped URLs grouped by domain (v0.5). Coexists with the
+  // per-bullet verify links above; this is the canonical "all sources" list.
+  if (sources.length) {
+    const grouped = {};
+    for (const src of sources) {
+      const d = (src.domain || "unknown").toLowerCase();
+      if (!grouped[d]) grouped[d] = [];
+      grouped[d].push(src);
+    }
+    const groupKeys = Object.keys(grouped).sort();
+    const groupsHtml = groupKeys.map(domain => {
+      const items = grouped[domain].map(s => {
+        const safeUrl = escapeHtmlAttr(s.url);
+        const safeTitle = escapeHtmlSafe(s.title || s.url);
+        return (
+          `<div style="margin-top:6px;font-size:14px;line-height:1.45;">` +
+          `<a href="${safeUrl}" style="color:${CLIP.c_accent};text-decoration:underline;">${safeTitle}</a>` +
+          `<div style="color:${CLIP.c_sub};font-size:12px;margin-top:1px;">${safeUrl}</div>` +
+          `</div>`
+        );
+      }).join("");
       return (
-        `<div style="margin-top:8px;font-size:14px;line-height:1.45;">` +
-        `<a href="${escapeHtmlAttr(a.url)}" style="color:${CLIP.c_accent};text-decoration:underline;">${escapeHtmlSafe(a.title || a.url)}</a>` +
-        (a.snippet ? `<div style="color:${CLIP.c_sub};font-style:italic;margin-top:2px;padding-left:1.5em;">"${escapeHtmlSafe(a.snippet)}"</div>` : "") +
-        `${verified}</div>`
+        `<div style="margin-top:12px;">` +
+        `<div style="font-weight:600;font-size:12px;color:${CLIP.c_sub};` +
+        `text-transform:uppercase;letter-spacing:0.04em;">${escapeHtmlSafe(domain)}</div>` +
+        `${items}` +
+        `</div>`
       );
     }).join("");
     sections.push(
       `<div style="margin-top:16px;padding:20px 24px;background:${CLIP.c_card};` +
       `border:1px solid ${CLIP.c_border};border-radius:16px;">` +
       `<h3 style="margin:0 0 12px;font-size:13px;font-weight:600;color:${CLIP.c_sub};` +
-      `text-transform:uppercase;letter-spacing:0.04em;">Sources (from web research)</h3>` +
-      `<div>${linksHtml}</div>` +
+      `text-transform:uppercase;letter-spacing:0.04em;">Sources · ${sources.length} ${sources.length === 1 ? "source" : "sources"}</h3>` +
+      `<div>${groupsHtml}</div>` +
       `</div>`
     );
   }
 
-  // Meta + Disclaimer
+  // Meta + Disclaimer (v0.5 — research stats appended to the existing line)
   const date = meta.lastVerified || new Date().toISOString().slice(0, 10);
-  const metaHtml = `<p style="margin-top:16px;font-size:12px;color:${CLIP.c_sub};text-align:center;">Last verified: ${escapeHtmlSafe(date)}</p>`;
+  const statParts = [];
+  if (searchQs.length)   statParts.push(`${searchQs.length} ${searchQs.length === 1 ? "search" : "searches"}`);
+  if (sources.length)    statParts.push(`${sources.length} ${sources.length === 1 ? "source" : "sources"}`);
+  if (ann.length)        statParts.push(`${ann.length} inline ${ann.length === 1 ? "citation" : "citations"}`);
+  const statsSuffix = statParts.length
+    ? ` &nbsp;·&nbsp; Research: ${statParts.join(" · ")}`
+    : "";
+  const metaHtml = `<p style="margin-top:16px;font-size:12px;color:${CLIP.c_sub};text-align:center;">Last verified: ${escapeHtmlSafe(date)}${statsSuffix}</p>`;
   const discHtml =
     `<div style="margin-top:12px;padding:12px 16px;background:${CLIP.c_discBg};border-radius:12px;` +
     `font-size:12px;line-height:1.5;color:${CLIP.c_sub};">` +
@@ -1398,11 +1593,13 @@ function buildReportHtml(md, caveats, annotations, critical) {
   );
 }
 
-function buildReportText(md, caveats, annotations, critical) {
+function buildReportText(md, caveats, annotations, critical, research) {
   const s    = parseSections(md);
   const meta = extractMeta(md);
   const ann  = Array.isArray(annotations) ? annotations : [];
   const crit = Array.isArray(critical)    ? critical   : [];
+  const searchQs = Array.isArray(research?.searchQueries) ? research.searchQueries : [];
+  const sources  = Array.isArray(research?.sources)       ? research.sources       : [];
   const date = meta.lastVerified || new Date().toISOString().slice(0, 10);
   const out  = [];
 
@@ -1449,21 +1646,47 @@ function buildReportText(md, caveats, annotations, critical) {
   push("Exception rules",       s.exceptions);
   push("Travel advisories",     s.advisories);
 
-  if (ann.length) {
+  if (searchQs.length) {
+    const rows = searchQs.map((q, i) => `  ${i + 1}. ${q}`);
+    out.push(`Research log (${searchQs.length} ${searchQs.length === 1 ? "search" : "searches"})\n` + rows.join("\n"));
+  }
+  if (sources.length) {
+    const grouped = {};
+    for (const src of sources) {
+      const d = (src.domain || "unknown").toLowerCase();
+      if (!grouped[d]) grouped[d] = [];
+      grouped[d].push(src);
+    }
+    const groupKeys = Object.keys(grouped).sort();
+    const sections = groupKeys.map(domain => {
+      const rows = grouped[domain].map(s => `  - ${s.title || s.url}\n    ${s.url}`);
+      return `${domain}\n${rows.join("\n")}`;
+    });
+    out.push(`Sources (${sources.length} ${sources.length === 1 ? "source" : "sources"})\n` + sections.join("\n"));
+  } else if (ann.length) {
+    // Back-compat fallback when worker didn't send sources[].
     const rows = ann.map(a => `- ${a.title || a.url}\n  ${a.url}${a.snippet ? `\n  "${a.snippet}"` : ""}`);
     out.push("Sources (from web research)\n" + rows.join("\n"));
   }
   if (caveats && caveats.trim()) out.push("Caveats\n" + caveats.trim());
-  out.push(`Last verified: ${date}`);
+
+  // Meta line with research stats appended (v0.5)
+  const statParts = [];
+  if (searchQs.length) statParts.push(`${searchQs.length} ${searchQs.length === 1 ? "search" : "searches"}`);
+  if (sources.length)  statParts.push(`${sources.length} ${sources.length === 1 ? "source" : "sources"}`);
+  if (ann.length)      statParts.push(`${ann.length} inline ${ann.length === 1 ? "citation" : "citations"}`);
+  const statsSuffix = statParts.length ? `  ·  Research: ${statParts.join(" · ")}` : "";
+  out.push(`Last verified: ${date}${statsSuffix}`);
+
   out.push("---");
   out.push(`This is general information based on publicly available sources as of ${date}. Not legal advice. Not a substitute for an immigration attorney.`);
 
   return out.join("\n\n");
 }
 
-async function copyReport(md, caveats, annotations, critical) {
-  const html = buildReportHtml(md, caveats, annotations, critical);
-  const text = buildReportText(md, caveats, annotations, critical);
+async function copyReport(md, caveats, annotations, critical, research) {
+  const html = buildReportHtml(md, caveats, annotations, critical, research);
+  const text = buildReportText(md, caveats, annotations, critical, research);
   if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
     try {
       await navigator.clipboard.write([

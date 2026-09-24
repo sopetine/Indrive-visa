@@ -165,7 +165,39 @@ The system prompt instructs the LLM to wrap its answer in a ```json fence (see �
   "annotations": [
     { "title": "Wikipedia — Visa policy of Romania",          "url": "https://en.wikipedia.org/wiki/Visa_policy_of_Romania",                 "start": 42,  "end": 87,  "snippet": "may enter Romania visa-free for a maximum of 90 days within any 180-day period" },
     { "title": "EU Schengen Visa Policy",                     "url": "https://home-affairs.ec.europa.eu/policies/schengen/visa-policy_en",  "start": 120, "end": 165, "snippet": "The standard Schengen visa fee is 90 EUR" }
-  ]
+  ],
+  "searchQueries": [
+    "Visa policy Romania Wikipedia",
+    "Visa requirements for US citizens Wikipedia",
+    "IATA Travel Centre Romania",
+    "Schengen visa fee 2026 site:europa.eu",
+    "Schengen visa processing time official",
+    "Romania travel advisory US State Department",
+    "Schengen 90/180 calculator",
+    "Romania eVisa portal official",
+    "US passport validity Schengen rule",
+    "Recent Schengen fee change 2025 2026",
+    "Romania US embassy guidance"
+  ],
+  "sources": [
+    { "title": "Visa policy of Romania",                       "url": "https://en.wikipedia.org/wiki/Visa_policy_of_Romania",                "domain": "wikipedia.org" },
+    { "title": "Visa requirements for United States citizens", "url": "https://en.wikipedia.org/wiki/Visa_requirements_for_United_States_citizens", "domain": "wikipedia.org" },
+    { "title": "IATA Travel Centre — Romania",                 "url": "https://www.iatatravelcentre.com/passport-visas-health.php?country=RO", "domain": "iatatravelcentre.com" },
+    { "title": "EU Schengen Visa Policy",                      "url": "https://home-affairs.ec.europa.eu/policies/schengen/visa-policy_en", "domain": "ec.europa.eu" },
+    { "title": "Schengen 90/180 calculator",                   "url": "https://ec.europa.eu/assets/home/visa-calculator/calculator.htm?lang=en", "domain": "ec.europa.eu" },
+    { "title": "US State Department — Romania travel advisory","url": "https://travel.state.gov/content/travel/en/international-travel/International-Travel-Country-Information-Pages/Romania.html", "domain": "travel.state.gov" },
+    { "title": "Romania travel advisory — European Commission","url": "https://home-affairs.ec.europa.eu/policies/schengen/visa-policy_en", "domain": "ec.europa.eu" },
+    { "title": "Romania MFA — consular fees",                  "url": "https://www.mae.ro/en/node/2110", "domain": "mae.ro" },
+    { "title": "Wikipedia — Schengen Area",                    "url": "https://en.wikipedia.org/wiki/Schengen_Area", "domain": "wikipedia.org" },
+    { "title": "Wikipedia — Visa requirements for US citizens","url": "https://en.wikipedia.org/wiki/Visa_requirements_for_United_States_citizens", "domain": "wikipedia.org" },
+    { "title": "Schengen visa fee — 2026 update",              "url": "https://home-affairs.ec.europa.eu/news/schengen-visa-fee-increase-2026_en", "domain": "ec.europa.eu" },
+    { "title": "Romania US Embassy guidance",                  "url": "https://ro.usembassy.gov/visas/", "domain": "usembassy.gov" },
+    { "title": "IATA Timatic — passport validity",             "url": "https://www.iatatravelcentre.com/passport-visas-health.php", "domain": "iatatravelcentre.com" },
+    { "title": "Wikipedia — Visa policy of Romania §US",       "url": "https://en.wikipedia.org/wiki/Visa_policy_of_Romania#United_States", "domain": "wikipedia.org" },
+    { "title": "Romania Ministry of Foreign Affairs — visa info","url": "https://www.mae.ro/en/node/2110", "domain": "mae.ro" }
+  ],
+  "sourcesReturned": 15,
+  "researchWarning": null
 }
 ```
 
@@ -176,6 +208,8 @@ The system prompt instructs the LLM to wrap its answer in a ```json fence (see �
 ```
 
 The `markdown` field follows the section order in §2 of the prompt with `🚨 [TYPE]` prefixes on critical sections. The `critical[]` array drives the color-coded "Before you book" numbered checklist at the top of the report. The `annotations[]` array is the ground-truth provenance — each entry is a span-level `url_citation` returned by the API for one grounded claim (the LLM actually visited the URL via the `web_search` tool). The UI maps these annotations to bullet character ranges and appends a "Verify on {source}" hover-tooltip link to each bullet. Empty `annotations[]` triggers an "unverified" banner at the top.
+
+**v0.5 deep-research envelope** — `searchQueries[]`, `sources[]`, `sourcesReturned`, `researchWarning`. Every query must perform **10–12 web searches** yielding **≥15 distinct URLs** in `sources[]`. `searchQueries[]` is the ordered list of queries the LLM actually executed. `sources[]` is the deduped list of URLs it consulted, with `title` + `url` + registrable `domain`. `sourcesReturned` is the distinct-URL count (also enforced by the Worker). If the first attempt returns fewer than 15 sources, the Worker **auto-retries once** with a "do more searches" reminder; if the retry also falls short, the response includes a `researchWarning` string and the UI surfaces an amber partial-research banner.
 
 ## Local development
 
@@ -260,5 +294,5 @@ Not in MVP, intentionally:
 
 - **Design language** — derived from the [inDrive.com](https://indrive.com/) styleguide (interior DS).
 - **Countries dataset** — curated subset; full list from [imorte/passport-index-data](https://github.com/imorte/passport-index-data) (MIT).
-- **System prompt** — see [`visa-advisor-prompt.md`](./visa-advisor-prompt.md) (v0.4 — mandates server-side `web_search` for live research, typed `[MONEY]/[DEADLINE]/[ENTRY]/[DOC]/[STALE]` critical markers), sourced from the same spec.
+- **System prompt** — see [`visa-advisor-prompt.md`](./visa-advisor-prompt.md) (v0.5 — 10–12 web searches per query, ≥15 distinct sources, server-side `web_search` for live research, typed `[MONEY]/[DEADLINE]/[ENTRY]/[DOC]/[STALE]` critical markers, Research log + Sources (N) envelope), sourced from the same spec.
 - **Disclaimer** — text matches the prompt's `§8f` disclaimer template.

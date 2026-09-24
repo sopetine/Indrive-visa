@@ -1390,6 +1390,94 @@ li[data-critical-type] .verify-link {
 .report-unverified-banner strong { display: block; margin-bottom: 2px; }
 .report-unverified-banner > div { font-size: 14px; line-height: 1.45; }
 
+/* ----- v0.5 deep-research: partial-research warning ----- */
+.report-research-warning {
+  margin-top: var(--sp-4);
+  padding: 14px 18px;
+  background: var(--extensions-background-lightwarning, #FFF1C0);
+  border: 1px solid var(--extensions-border-warning, #FFC13C);
+  border-left: 4px solid var(--extensions-border-warning, #FFC13C);
+  border-radius: var(--r-3, 16px);
+  color: var(--information-dark-chickdark, #8C5C00);
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.report-research-warning .material-symbols-outlined {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+.report-research-warning strong { display: block; margin-bottom: 2px; }
+.report-research-warning > div { font-size: 14px; line-height: 1.45; }
+
+/* ----- v0.5 deep-research: research log + sources (N) ----- */
+.report-section-count {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--extensions-background-lightneutral, #F4F3D8);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--extensions-text-neutral, #6A6B6E);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.report-research-log-list {
+  list-style: decimal inside;
+  margin: 12px 0 0;
+  padding: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--extensions-text-sub, #6A6B6E);
+  line-height: 1.5;
+}
+.report-research-log-item {
+  margin-top: 4px;
+  word-break: break-word;
+}
+
+.report-source-groups { margin-top: 12px; }
+.report-source-group  { margin-top: 12px; }
+.report-source-group:first-child { margin-top: 0; }
+.report-source-domain {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--extensions-text-sub, #6A6B6E);
+  margin-bottom: 6px;
+  font-family: var(--font-family-heading);
+}
+.report-source-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.report-source-item {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--extensions-background-lightneutral, #F5F5F6);
+}
+.report-source-link {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-accent, #4087E1);
+  text-decoration: none;
+  line-height: 1.4;
+}
+.report-source-link:hover { text-decoration: underline; }
+.report-source-url {
+  font-size: 12px;
+  color: var(--extensions-text-sub, #6A6B6E);
+  margin-top: 2px;
+  word-break: break-all;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
 /* ----- Before-you-book checklist ----- */
 .before-you-book {
   margin-top: var(--sp-5);

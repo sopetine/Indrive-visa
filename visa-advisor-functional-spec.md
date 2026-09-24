@@ -2,7 +2,7 @@
 
 > **Scope:** functional behavior for the responsive web app. Visual design is driven by a separate styleguide (to be applied later) and the inDrive-style UI requirement per the BRD. This spec describes **what** the app does, not **how** it looks.
 
-**Version:** v0.2 — companion to `visa-advisor-prompt.md` v0.4
+**Version:** v0.3 — companion to `visa-advisor-prompt.md` v0.5 (deep-research mandate: 10–12 searches, ≥15 distinct sources, Research log + Sources (N) sections visible in the report)
 
 ---
 
