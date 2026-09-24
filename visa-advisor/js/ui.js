@@ -498,30 +498,17 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
     }));
   }
 
-  // v0.7.1+ — defensive: if the renderer only produced a Sources section
-  // and every parsed `### ` heading was empty, surface that to the user
-  // instead of silently showing an empty body. Helps debug worker/prompt
-  // regressions where `markdown` arrives without section headings.
+  // v0.7.1+ — defensive: if every parsed `### ` heading was empty, don't
+  // leave the report body silently empty (previously this branch only
+  // fired when sources[] was non-empty, so a heading-format break with
+  // zero sources rendered nothing at all but the meta line + disclaimer).
+  // Instead always fall back to showing the raw markdown so the user
+  // gets *something* readable even when the contract drifts.
   const sectionKeys = ["visaStatus","allowedStay","passportValidity","fee","processingTime","requiredDocs","officialUrl","exceptions","advisories"];
   const filledKeys = sectionKeys.filter((k) => sections[k] && String(sections[k]).trim());
-  if (filledKeys.length === 0 && sources.length > 0) {
-    const note = document.createElement("div");
-    note.className = "report-section";
-    note.style.borderLeft = "3px solid var(--extensions-background-warning, #FFC13C)";
-    note.style.background = "var(--extensions-background-lightwarning, #FFF1C0)";
-    note.innerHTML = `
-      <div class="report-section-title">
-        <span class="material-symbols-outlined">warning_amber</span>
-        Report body empty
-      </div>
-      <p class="report-section-value">
-        The advisor returned <strong>${sources.length}</strong> source${sources.length === 1 ? "" : "s"} but no parsed sections
-        (<code style="font-family:var(--font-family-mono);">### </code> visa status, fee, processing, docs, etc.).
-        Showing sources only.
-      </p>
-    `;
-    body.insertBefore(note, body.firstChild);
-    console.warn("[visa-advisor] renderReport: only sources arrived, no parsed sections. markdown length:", (markdown || "").length);
+  if (filledKeys.length === 0) {
+    body.insertBefore(renderRawMarkdownFallback(markdown, sources.length), body.firstChild);
+    console.warn("[visa-advisor] renderReport: no parsed sections, falling back to raw markdown. markdown length:", (markdown || "").length);
   }
   if (metaLineParts.length) {
     const meta_el = document.createElement("p");
@@ -822,6 +809,29 @@ function renderResearchWarning(message, sourcesReturned) {
     </div>
   `;
   return el;
+}
+
+/* Shown when parseSections() found none of the canonical headings —
+   renders the raw markdown text so the user sees the advisor's actual
+   answer instead of an empty report body. */
+function renderRawMarkdownFallback(markdown, sourcesCount) {
+  const wrap = document.createElement("div");
+  wrap.className = "report-section";
+  wrap.style.borderLeft = "3px solid var(--extensions-background-warning, #FFC13C)";
+  wrap.style.background = "var(--extensions-background-lightwarning, #FFF1C0)";
+  const note = sourcesCount > 0
+    ? `The advisor returned <strong>${sourcesCount}</strong> source${sourcesCount === 1 ? "" : "s"} but no parsed sections ` +
+      `(<code style="font-family:var(--font-family-mono);">### </code> visa status, fee, processing, docs, etc.). Showing the raw response below.`
+    : `The advisor's response didn't match the expected report format. Showing the raw response below.`;
+  wrap.innerHTML = `
+    <div class="report-section-title">
+      <span class="material-symbols-outlined">warning_amber</span>
+      Report format unrecognized
+    </div>
+    <p class="report-section-value">${note}</p>
+    <pre class="report-raw-markdown">${escapeHtml((markdown || "").trim())}</pre>
+  `;
+  return wrap;
 }
 
 /* v0.5 — collapsible "Research log" section listing every search query the
