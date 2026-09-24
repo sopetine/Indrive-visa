@@ -100,7 +100,7 @@ export function initForm({ onSubmit }) {
   }
   if (cachedInput && pillEl && pillRouteEl) {
     const route = [cachedInput.nationality, cachedInput.destination || cachedInput.from]
-      .filter(Boolean).join(" → ");
+      .filter(Boolean).join(" / ");
     if (route) {
       pillRouteEl.textContent = route;
       pillEl.hidden = false;
@@ -1633,7 +1633,7 @@ export function initReportView({ onEdit }) {
     root.from.textContent = from ? `${from.flag} ${from.code}` : (fromCode || "—");
     root.to.textContent   = to   ? `${to.flag} ${to.code}`     : (toCode || "—");
     if (destinationCode) {
-      root.to.textContent += `  →  ${destinationCode}`;
+      root.to.textContent += `  /  ${destinationCode}`;
     }
   }
 

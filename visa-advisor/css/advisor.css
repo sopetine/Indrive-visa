@@ -431,31 +431,23 @@
    REPORT VIEW
    ============================================================ */
 
-/* ---------- Action bar (sticky to very top) ---------- */
+/* ---------- Action bar ---------- */
 .action-bar {
-  position: sticky;
-  top: 0;
-  width: 100%;
   margin-bottom: var(--sp-4);
-  z-index: 50;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: saturate(180%) blur(8px);
-  -webkit-backdrop-filter: saturate(180%) blur(8px);
-  border-bottom: 1px solid var(--border-primary);
 }
 .action-bar-inner {
   max-width: var(--container-narrow);
   margin-inline: auto;
-  padding: var(--sp-2) var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
 }
 @media (min-width: 768px) {
-  .action-bar-inner { padding: var(--sp-2) var(--sp-6); }
+  .action-bar-inner { padding: var(--sp-3) var(--sp-6); }
 }
 .action-bar-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-3);
+  justify-content: flex-end;
+  gap: var(--sp-4);
   flex-wrap: wrap;
 }
 .action-bar-route {
@@ -467,8 +459,29 @@
 }
 .action-bar-buttons {
   display: flex;
-  gap: var(--sp-2);
+  gap: var(--sp-4);
   flex-wrap: wrap;
+}
+.action-bar-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  color: var(--main-dark);
+  font-family: var(--font-family-body);
+  font-size: var(--fs-s);
+  font-weight: var(--fw-semibold);
+  padding: 0;
+  cursor: pointer;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.action-bar-link .btn-icon {
+  font-size: 16px;
+  margin-right: 0;
+}
+.action-bar-link:hover {
+  opacity: 0.7;
 }
 .route-chip {
   display: inline-flex;
@@ -485,7 +498,8 @@
   background: var(--soft-beige);
 }
 .route-arrow {
-  font-size: 16px;
+  font-size: 14px;
+  font-weight: var(--fw-semibold);
   color: var(--text-and-icon-secondary);
 }
 
@@ -693,7 +707,7 @@
   background: var(--main-white);
   border: 1px solid var(--border-primary);
   box-shadow: var(--shadow-s);
-  border-radius: var(--r-4);
+  border-radius: var(--r-5);
   padding: var(--sp-5);
 }
 .report-section-title {
@@ -838,7 +852,7 @@
 .report-caveats {
   padding: var(--sp-4) var(--sp-5);
   background: var(--extensions-background-lightwarning);
-  border: 1px solid var(--extensions-background-warning);
+  box-shadow: var(--shadow-s);
   border-radius: var(--r-4);
   color: var(--information-dark-chickdark);
   display: grid;
@@ -1372,35 +1386,25 @@
   align-items: center;
   gap: 4px;
   margin-left: 8px;
-  padding: 3px 10px 3px 8px;
+  padding: 3px 0;
   font-family: var(--font-family-body);
   font-size: 12px;
   font-weight: var(--fw-semibold, 600);
-  color: var(--text-and-icon-accent, #4087E1);
-  background: rgba(64, 135, 225, 0.08);
-  border: 1px solid rgba(64, 135, 225, 0.25);
-  border-radius: 9999px;
+  color: var(--main-dark);
+  background: transparent;
+  border: 0;
   text-decoration: none;
   white-space: nowrap;
   vertical-align: 2px;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: opacity 120ms ease;
 }
 .verify-link:hover,
 .verify-link:focus-visible {
-  background: rgba(64, 135, 225, 0.18);
-  border-color: var(--text-and-icon-accent, #4087E1);
+  text-decoration: underline;
   outline: none;
-  text-decoration: none;
 }
 .verify-link:focus-visible {
-  box-shadow: 0 0 0 3px rgba(64, 135, 225, 0.35);
-}
-
-/* Verify link inside a critical-fact bullet — keep it readable on amber. */
-.critical-fact .verify-link,
-li[data-critical-type] .verify-link {
-  background: rgba(255, 255, 255, 0.55);
-  border-color: rgba(64, 135, 225, 0.4);
+  box-shadow: 0 0 0 3px rgba(20, 20, 20, 0.2);
 }
 
 /* ----- Zero-annotation unverified banner (FLAT) ----- */
@@ -1580,16 +1584,15 @@ li[data-critical-type] .verify-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 10px;
+  padding: 6px 0;
   font-size: 12px;
   font-weight: var(--fw-semibold, 600);
-  color: var(--text-and-icon-accent, #4087E1);
-  background: rgba(64, 135, 225, 0.08);
-  border: 1px solid rgba(64, 135, 225, 0.25);
-  border-radius: 9999px;
+  color: var(--main-dark);
+  background: transparent;
+  border: 0;
   text-decoration: none;
   white-space: nowrap;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: opacity 120ms ease;
 }
 
 /* v0.7.2 (L5) — server-grounded snippet block under the value. */
@@ -1630,8 +1633,7 @@ li[data-critical-type] .verify-link {
 }
 .critical-step-verify:hover,
 .critical-step-verify:focus-visible {
-  background: rgba(64, 135, 225, 0.18);
-  border-color: var(--text-and-icon-accent, #4087E1);
+  text-decoration: underline;
   outline: none;
 }
 
@@ -1780,6 +1782,8 @@ li[data-critical-type] .verify-link {
 
   .view-pill-btn { background: #1F1F1F; border-color: #2A2A2A; color: #F5F5F6; }
   .view-pill-btn:hover { background: #2A2A2A; }
+
+  .action-bar-link { color: #F5F5F6; }
   .view-pill-route { color: #A8AAAD; }
 
   .action-bar-progress-track { background: #2A2A2A; }
@@ -1788,13 +1792,10 @@ li[data-critical-type] .verify-link {
   .action-bar-progress-step.is-active { color: #F5F5F6; }
   .action-bar-progress-step.is-active::before,
   .action-bar-progress-step.is-done::before { background: var(--main-green); }
-  .action-bar { background: rgba(20, 20, 20, 0.92); border-bottom-color: #2A2A2A; }
-
   .route-chip--alt { background: #2A2A2A; color: #F5F5F6; }
 
   .report-caveats {
     background: #3F2E0A;
-    border-color: #5F4A1A;
     color: #FFCB66;
   }
   .report-disclaimer { background: #1A1A1A; border: 0; color: #A8AAAD; }
@@ -1856,19 +1857,7 @@ li[data-critical-type] .verify-link {
 
   /* v0.4 dark variants */
   .verify-link {
-    color: #8AB4F8;
-    background: rgba(138, 180, 248, 0.12);
-    border-color: rgba(138, 180, 248, 0.35);
-  }
-  .verify-link:hover,
-  .verify-link:focus-visible {
-    background: rgba(138, 180, 248, 0.22);
-    border-color: #8AB4F8;
-  }
-  .critical-fact .verify-link,
-  li[data-critical-type] .verify-link {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(138, 180, 248, 0.45);
+    color: #F5F5F6;
   }
 
   .report-unverified-banner {
@@ -1904,14 +1893,7 @@ li[data-critical-type] .verify-link {
   .critical-step-label  { color: #9CA3AF; }
   .critical-step-value  { color: #F5F5F6; }
   .critical-step-verify {
-    color: #8AB4F8;
-    background: rgba(138, 180, 248, 0.10);
-    border-color: rgba(138, 180, 248, 0.35);
-  }
-  .critical-step-verify:hover,
-  .critical-step-verify:focus-visible {
-    background: rgba(138, 180, 248, 0.20);
-    border-color: #8AB4F8;
+    color: #F5F5F6;
   }
 
   .report-section.is-critical {

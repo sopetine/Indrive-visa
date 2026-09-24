@@ -156,26 +156,25 @@
     <!-- ===== REPORT VIEW ===== -->
     <section class="view view--report" data-view="report" aria-labelledby="report-title" hidden>
 
-      <!-- Sticky action bar (full-bleed; direct child of the section so its
-           sticky positioning isn't constrained by container--narrow's padding) -->
+      <!-- Action bar (route + edit/copy/share) -->
       <div class="action-bar" data-action-bar>
         <div class="action-bar-inner">
           <div class="action-bar-row">
             <div class="action-bar-route">
               <span class="route-chip" data-report-from>—</span>
-              <span class="material-symbols-outlined route-arrow">arrow_forward</span>
+              <span class="route-arrow" aria-hidden="true">/</span>
               <span class="route-chip route-chip--alt" data-report-to>—</span>
             </div>
             <div class="action-bar-buttons">
-              <button type="button" class="btn btn--outline btn--sm" data-action="edit">
+              <button type="button" class="action-bar-link" data-action="edit">
                 <span class="material-symbols-outlined btn-icon">edit</span>
                 Edit
               </button>
-              <button type="button" class="btn btn--outline btn--sm" data-action="copy">
+              <button type="button" class="action-bar-link" data-action="copy">
                 <span class="material-symbols-outlined btn-icon">content_copy</span>
                 Copy
               </button>
-              <button type="button" class="btn btn--primary btn--sm" data-action="share">
+              <button type="button" class="action-bar-link" data-action="share">
                 <span class="material-symbols-outlined btn-icon">share</span>
                 Share
               </button>
