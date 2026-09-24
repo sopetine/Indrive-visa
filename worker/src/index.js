@@ -92,6 +92,12 @@ export default {
       const queries = buildSearchQueries(env, nationality, destination, purpose, from);
       try {
         const results = await fetchTavilyResults(env, queries);
+        // Sort authoritative domains (.gov, IATA, Wikipedia, multilateral
+        // orgs) first so they fill the evidence char budget before lower-
+        // tier results — previously results were sent in raw Tavily
+        // return order, so a .gov source could get truncated out in
+        // favor of a lower-tier one that happened to be fetched earlier.
+        results.sort((a, b) => domainTier(extractDomain(a.url)) - domainTier(extractDomain(b.url)));
         if (results.length) {
           tavilyRawResults = results;
           serverSearchSources = results.map((r) => ({
@@ -244,21 +250,34 @@ function buildUserMessage({ nationality, from, destination, date, purpose, comme
    v0.7 — server-side search (Tier 1: Tavily)
    ────────────────────────────────────────────────────────── */
 
+const SCHENGEN_COUNTRIES = new Set([
+  "austria", "belgium", "bulgaria", "croatia", "czech republic", "czechia",
+  "denmark", "estonia", "finland", "france", "germany", "greece", "hungary",
+  "iceland", "italy", "latvia", "liechtenstein", "lithuania", "luxembourg",
+  "malta", "netherlands", "norway", "poland", "portugal", "romania",
+  "slovakia", "slovenia", "spain", "sweden", "switzerland",
+]);
+
 /* Deterministic query list. We pin the order and exact strings so
    re-runs of the same (nationality, destination, purpose) tuple
-   return the same results — reproducible for testing. */
+   return the same results — reproducible for testing.
+
+   Ordered by priority, not topic: the request-specific conditionals
+   (nationality/purpose) come first so they survive the `cap` slice
+   below even at the default cap of 7 — generic filler queries
+   (IATA matrix, reciprocity fee) sort last and are the ones dropped
+   when the cap is tight. */
 function buildSearchQueries(env, nationality, destination, purpose, from) {
   const n  = String(nationality || "").trim();
   const d  = String(destination || "").trim() || "the destination country";
   const isRussian = /russian|russia/i.test(n);
+  const isSchengen = SCHENGEN_COUNTRIES.has(d.toLowerCase());
+
   const q = [
     `${n} visa requirements ${d} citizens 2026`,
     `${d} visa fee processing time official site 2026`,
     `${d} travel advisory ${n} citizens`,
-    `IATA travel centre ${d} passport visa`,
     `${d} eVisa ETA official government portal 2026`,
-    `Schengen 90 180 rolling window rules visa`,
-    `Reciprocity visa fee ${n} ${d}`,
   ];
   if (isRussian) {
     q.push(`${n} ${d} entry sanctions 2026 visa restrictions`);
@@ -267,51 +286,57 @@ function buildSearchQueries(env, nationality, destination, purpose, from) {
   if (/business/i.test(purpose || "")) {
     q.push(`${d} business visitor visa requirements ${n} 2026`);
   }
+  if (isSchengen) {
+    q.push(`Schengen 90 180 rolling window rules visa`);
+  }
+  q.push(`IATA travel centre ${d} passport visa`);
+  q.push(`Reciprocity visa fee ${n} ${d}`);
+
   const cap = parseInt((env && env.SEARCH_QUERIES_PER_RUN) || "7", 10) || 7;
   return q.slice(0, cap);
 }
 
 async function fetchTavilyResults(env, queries, maxPerQuery = 6) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 4500);
-  try {
-    const responses = await Promise.all(
-      queries.map((query) =>
-        fetch("https://api.tavily.com/search", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({
-            api_key:            env.TAVILY_API_KEY,
-            query,
-            max_results:        maxPerQuery,
-            search_depth:       "advanced",
-            include_answer:     false,
-            include_raw_content: false,
-          }),
-        }).then((r) => (r.ok ? r.json() : null))
-          .catch(() => null)
-      )
-    );
-    const seen = new Set();
-    const out  = [];
-    for (const resp of responses) {
-      if (!resp || !Array.isArray(resp.results)) continue;
-      for (const r of resp.results) {
-        if (!r || typeof r.url !== "string" || !r.url.startsWith("http")) continue;
-        if (seen.has(r.url)) continue;
-        seen.add(r.url);
-        out.push({
-          title:   typeof r.title   === "string" ? r.title : "",
-          url:     r.url,
-          content: typeof r.content === "string" ? r.content : "",
-        });
-      }
+  // Each query gets its own timeout so one slow query can't starve the
+  // others — previously a single shared AbortController meant if the
+  // whole batch was slow, all queries died together at once.
+  const responses = await Promise.all(
+    queries.map((query) => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4500);
+      return fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          api_key:            env.TAVILY_API_KEY,
+          query,
+          max_results:        maxPerQuery,
+          search_depth:       "advanced",
+          include_answer:     false,
+          include_raw_content: false,
+        }),
+      }).then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+        .finally(() => clearTimeout(timeout));
+    })
+  );
+  const seen = new Set();
+  const out  = [];
+  for (const resp of responses) {
+    if (!resp || !Array.isArray(resp.results)) continue;
+    for (const r of resp.results) {
+      if (!r || typeof r.url !== "string" || !r.url.startsWith("http")) continue;
+      if (seen.has(r.url)) continue;
+      seen.add(r.url);
+      out.push({
+        title:   typeof r.title   === "string" ? r.title : "",
+        url:     r.url,
+        content: typeof r.content === "string" ? r.content : "",
+      });
     }
-    return out;
-  } finally {
-    clearTimeout(timeout);
   }
+  return out;
 }
 
 /* Formats results as numbered footnotes with optional content snippet.
@@ -416,10 +441,10 @@ function parseContract(data, serverSources = [], tavilyResults = []) {
         if (Array.isArray(cleanCrit) && cleanCrit.length && tavilyResults.length) {
           const overrides = matchCriticalFactsToTavilyResults(cleanCrit, tavilyResults);
           factMatches = overrides.matches;
-          for (const c of cleanCrit) {
-            const m = overrides.byLabel[c.label];
+          cleanCrit.forEach((c, i) => {
+            const m = overrides.byIndex[i];
             if (m) c.source = m.url;
-          }
+          });
         }
 
         return {
@@ -527,6 +552,18 @@ function dedupeSourcesByUrl(sources) {
   return Array.from(map.values());
 }
 
+/* Mirrors criticalityTier() in js/ui.js (used there for chip display
+   order) — used here to decide which results fill the evidence char
+   budget first, so authoritative sources aren't truncated out in favor
+   of lower-tier ones. */
+function domainTier(domain) {
+  const dom = (domain || "").toLowerCase();
+  if (/\.(gov|gouv|go\.jp)$/.test(dom)) return 0; // authoritative gov
+  if (/(wikipedia|iatatravelcentre|passportindex)/.test(dom)) return 1;
+  if (/(un\.int|nato\.int|europa\.eu)/.test(dom)) return 2; // multilateral
+  return 3;
+}
+
 function extractDomain(url) {
   try {
     const host = new URL(url).hostname.toLowerCase();
@@ -538,6 +575,7 @@ function extractDomain(url) {
 }
 
 function sanitiseCritical(raw) {
+  if (!Array.isArray(raw)) return [];
   const out = [];
   for (const c of raw) {
     if (!c || typeof c !== "object") continue;
@@ -555,10 +593,17 @@ function sanitiseCritical(raw) {
 
 /* v0.7.2 (L5) — match each Before-you-book fact (Fee / Processing time /
    Required document / Travel advisory) to the best-matching Tavily
-   snippet by token overlap. Score = |factTokens ∩ contentTokens| /
-   |factTokens|, lower-cased, stopwords removed.
+   snippet by token overlap. Score = weighted-hits / |factTokens|,
+   lower-cased, stopwords removed, decimals normalized ("$160.00" and
+   "$160" both tokenize to "160"). Numeric tokens (fees, day counts,
+   dates) count double toward the score so a snippet that repeats the
+   actual figure outranks one that only shares generic words from the
+   fact's label.
 
-   Returns { matches: [...], byLabel: { [label]: {url, score, snippet, title} } }.
+   Returns { matches: [...], byIndex: { [criticalArrayIndex]: {url, score, snippet, title} } }.
+   Keyed by array index (not label) so two critical[] entries sharing
+   the same label — e.g. two "Fee" rows for different visa types — don't
+   collide and overwrite each other's match.
    Matches below MATCH_THRESHOLD are dropped — caller falls back to
    the LLM-emitted c.source for that fact. */
 const FACT_STOPWORDS = new Set([
@@ -571,6 +616,7 @@ function tokenize(text) {
   if (!text) return [];
   return String(text)
     .toLowerCase()
+    .replace(/(\d+)\.0+\b/g, "$1")       // "160.00" -> "160"
     .replace(/[^a-z0-9]+/g, " ")
     .split(/\s+/)
     .filter(Boolean)
@@ -579,20 +625,27 @@ function tokenize(text) {
 function matchCriticalFactsToTavilyResults(critical, tavilyResults) {
   const MATCH_THRESHOLD = 0.18;
   const matches = [];
-  const byLabel = {};
-  for (const c of critical) {
-    if (!c || !c.label) continue;
-    const factTokens = tokenize(`${c.label} ${c.value || ""}`);
-    if (!factTokens.length) continue;
-    const factSet = new Set(factTokens);
+  const byIndex = {};
+  critical.forEach((c, index) => {
+    if (!c || !c.label) return;
+    // Weight value tokens (the actual fee/date/figure) over label tokens
+    // (generic words like "Fee" or "Processing time") — duplicating them
+    // in factTokens doubles their contribution to the denominator and to
+    // hit-counting alike, so a snippet that echoes the real value scores
+    // higher than one that only shares the generic label.
+    const labelTokens = tokenize(c.label);
+    const valueTokens = tokenize(c.value || "");
+    const factTokens = [...labelTokens, ...valueTokens, ...valueTokens];
+    if (!factTokens.length) return;
+    const isNumeric = (t) => /\d/.test(t);
     let best = null;
     for (const r of tavilyResults) {
       if (!r || !r.url || !r.content) continue;
-      const contentTokens = tokenize(r.content);
-      if (!contentTokens.length) continue;
+      const contentTokens = new Set(tokenize(r.content));
+      if (!contentTokens.size) continue;
       let hits = 0;
-      for (const t of contentTokens) {
-        if (factSet.has(t)) hits++;
+      for (const t of factTokens) {
+        if (contentTokens.has(t)) hits += isNumeric(t) ? 2 : 1;
       }
       const score = hits / factTokens.length;
       if (score >= MATCH_THRESHOLD && (!best || score > best.score)) {
@@ -605,7 +658,7 @@ function matchCriticalFactsToTavilyResults(critical, tavilyResults) {
       }
     }
     if (best) {
-      byLabel[c.label] = best;
+      byIndex[index] = best;
       matches.push({
         label:    c.label,
         value:    c.value || "",
@@ -616,8 +669,8 @@ function matchCriticalFactsToTavilyResults(critical, tavilyResults) {
         originalSource: c.source || "",
       });
     }
-  }
-  return { matches, byLabel };
+  });
+  return { matches, byIndex };
 }
 
 function corsHeaders(origin) {
