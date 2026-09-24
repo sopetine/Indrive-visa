@@ -4,7 +4,7 @@
 
 import { initModal } from "./ui.js";
 import { initForm } from "./ui.js";
-import { initReportView } from "./ui.js";
+import { initReportView, readReportCache } from "./ui.js";
 
 function start() {
   let formApi, reportApi;
@@ -76,6 +76,18 @@ function start() {
 
     if (input.nationality && input.from) {
       reportApi.setRoute(input.nationality, input.from, input.destination);
+      // v0.9 — try the route-keyed report cache first. If fresh, render
+      // it instantly; only fall through to the network when the cache
+      // miss (or expired).
+      const cached = readReportCache(input);
+      if (cached) {
+        try {
+          reportApi.renderCached(input, cached);
+          return;
+        } catch (err) {
+          console.warn("[visa-advisor] cached render failed; refetching:", err);
+        }
+      }
       reportApi.runQuery(input);
     } else {
       const cached = sessionStorage.getItem("visa-advisor.last-input")
@@ -85,6 +97,16 @@ function start() {
         // Migration shim for legacy cached shape { arrival } → { from }.
         if (parsed && !parsed.from && parsed.arrival) parsed.from = parsed.arrival;
         reportApi.setRoute(parsed.nationality, parsed.from, parsed.destination);
+        // Same cache-first behaviour as above (the pill reuses this path).
+        const cachedReport = readReportCache(parsed);
+        if (cachedReport) {
+          try {
+            reportApi.renderCached(parsed, cachedReport);
+            return;
+          } catch (err) {
+            console.warn("[visa-advisor] cached render failed; refetching:", err);
+          }
+        }
         reportApi.runQuery(parsed);
       } else {
         navigate("/", "");

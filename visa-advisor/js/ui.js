@@ -231,6 +231,156 @@ const CRITICAL_TYPE_META = {
  * The [TYPE] group is optional; type is undefined for untyped markers. */
 const CRITICAL_HEADING_RE = /^[\s\u00A0]*🚨(?:\s*\[(MONEY|DEADLINE|ENTRY|DOC|STALE)\])?\s*/i;
 
+/* ------------------------------------------------------------
+   v0.9 — inline phrase highlighter
+   Wraps key tokens in <mark class="hl-sm"> so they pop visually the
+   same way the "in seconds." and ".gov" highlights do in the form
+   heading. Used on the visa status badge, allowed-stay, fee, processing
+   time, and the required-documents body.
+   ------------------------------------------------------------ */
+
+/* Escape special regex chars for safe assembly of alternations. */
+function regexEscape(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/* Patterns are merged into a single alternation so a single pass never
+   double-wraps overlapping matches. Order matters — longer patterns
+   (multi-word tokens, ranges) must come before their shorter substrings. */
+const HL_TOKENS = [
+  // Status strings (must come before shorter substrings like "Visa-free" / "ETA")
+  "Embassy / consulate visa required",
+  "Professional counsel required",
+  "eTA required",
+  "eVisa required",
+  "Visa on arrival",
+  "Visa-free",
+  // Authorisation & form names
+  "consular jurisdiction", "Schengen visa",
+  "embassy appointment", "Yellow Fever",
+  "Schengen", "eVisa", "ETIAS", "ESTA", "DS-160",
+  "apostille", "apostilled", "biometrics", "reciprocity", "ETA",
+];
+
+const HL_TOKEN_GROUP = HL_TOKENS.map(regexEscape).join("|");
+
+/* Stay window: "90 days within any 180-day period" or "30 days". */
+const HL_STAY_RE_SRC =
+  `(\\d+\\s*(?:hours?|days?|weeks?|months?)(?:\\s+within\\s+any\\s+\\d+\\s*[-–]?\\s*day\\s+period)?)`;
+
+/* Processing-time range: "15–45 calendar days" or "30 calendar days".
+   Note: this matches plain day counts which also overlap with HL_STAY_RE —
+   the alternation above lists the longer-with-context variant first so
+   it wins on greedy left-to-right alternation. */
+const HL_DAYS_RE_SRC =
+  `(\\d+\\s*[-–]\\s*\\d+\\s*(?:calendar|business|working)?\\s*days?|\\d+\\s*(?:calendar|business|working)?\\s*days?)`;
+
+/* Money: ~90 EUR, 90 EUR, $50 USD, 90€, EUR 50, €30, etc. */
+const HL_MONEY_RE_SRC =
+  `(?:~\\$?\\s*\\d+(?:[,.]\\d+)?|\\d+[-–]\\d+|(?:USD|EUR|GBP|RUB|CAD|AUD|JPY|CNY|CHF|\\$|€|£|¥|₽|₹)\\s*\\d+(?:[,.]\\d+)?)\\s*(?:USD|EUR|GBP|RUB|CAD|AUD|JPY|CNY|CHF|\\$|€|£|¥|₽|₹)?`;
+
+/* Single combined regex with case-insensitive flag. Longest alternatives
+   first, then shorter ones — alternation is left-biased. */
+const HL_RE = new RegExp(
+  `\\b(?:${HL_TOKEN_GROUP})\\b|${HL_STAY_RE_SRC}|${HL_DAYS_RE_SRC}|${HL_MONEY_RE_SRC}`,
+  "gi"
+);
+
+/* Wrap a single occurrence. The strings we feed in are plain LLM output
+   (no prior <mark>), so a straight escape → regex → mark pipeline is
+   safe. Re-running hl() on already-wrapped text would double-wrap; we
+   never do that — the function is called once on each freshly-rendered
+   section value. */
+function hl(s) {
+  if (!s || typeof s !== "string") return "";
+  // Trim trailing whitespace that the money/stay regex may have eaten
+  // (e.g. "EUR 50 fee" → match "EUR 50 " with trailing space → strip it).
+  return escapeHtml(s).replace(HL_RE, (m) => {
+    const trimmed = m.replace(/\s+$/, "");
+    return `<mark class="hl-sm">${trimmed}</mark>`;
+  });
+}
+
+/* ------------------------------------------------------------
+   v0.9 — route-keyed report cache (Back-to-report opens cached)
+   One entry per (nationality, from, destination) tuple. TTL 12h.
+   Capped at 8 most-recent entries; oldest pruned on insert.
+   Stored in localStorage so the Back-to-last-report pill works
+   across tab closes.
+   ------------------------------------------------------------ */
+const CACHE_PREFIX = "visa-advisor.report.";
+const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const CACHE_MAX_ENTRIES = 8;
+
+function reportCacheKey(input) {
+  return [input.nationality, input.from, input.destination || ""]
+    .map((s) => String(s || "").trim().toLowerCase())
+    .join("|");
+}
+
+export function readReportCache(input) {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + reportCacheKey(input));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (typeof parsed.ts !== "number" || (Date.now() - parsed.ts) > CACHE_TTL_MS) {
+      localStorage.removeItem(CACHE_PREFIX + reportCacheKey(input));
+      return null;
+    }
+    if (typeof parsed.markdown !== "string") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeReportCache(input, envelope) {
+  const key = reportCacheKey(input);
+  const payload = { ...envelope, ts: Date.now() };
+  try {
+    localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(payload));
+    pruneReportCache();
+  } catch {
+    /* quota / private mode — ignore */
+  }
+}
+
+function pruneReportCache() {
+  try {
+    const entries = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(CACHE_PREFIX)) entries.push(k);
+    }
+    if (entries.length <= CACHE_MAX_ENTRIES) return;
+    entries.sort((a, b) => {
+      const ta = safeParseTs(localStorage.getItem(a)) || 0;
+      const tb = safeParseTs(localStorage.getItem(b)) || 0;
+      return ta - tb;
+    });
+    const drop = entries.length - CACHE_MAX_ENTRIES;
+    for (let i = 0; i < drop; i++) localStorage.removeItem(entries[i]);
+  } catch {
+    /* ignore */
+  }
+}
+
+function safeParseTs(raw) {
+  try { return JSON.parse(raw).ts; } catch { return null; }
+}
+
+function reportCacheAgeText(envelope) {
+  if (!envelope || typeof envelope.ts !== "number") return "";
+  const ageMs = Date.now() - envelope.ts;
+  const min = Math.floor(ageMs / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} hr ago`;
+  return new Date(envelope.ts).toLocaleString();
+}
+
 /* ──────────────────────────────────────────────────────────
    PUBLIC: renderReport(body, markdown, annotations, critical, caveats, research)
    ────────────────────────────────────────────────────────── */
@@ -268,15 +418,13 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
     body.appendChild(renderStatus(sections.visaStatus, sections.allowedStay));
   }
 
-  // Partial-research warning banner (v0.5) — above the zero-annotation banner
-  // so it's the very first thing the user sees when the worker came up short.
+  // Partial-research warning banner (v0.5) — surfaces when the worker
+  // came up short of the 15-distinct-source minimum even after the
+  // auto-retry. Kept (it's a meaningful signal); the zero-annotation
+  // "Web research did not return grounded sources" banner was removed
+  // per product feedback — it was always-on and noisy.
   if (research?.researchWarning && research.researchWarning.trim()) {
     body.appendChild(renderResearchWarning(research.researchWarning.trim(), research.sourcesReturned));
-  }
-
-  // Zero-annotation banner (top of report, above checklist)
-  if (ann.length === 0 && !research?.serverSearchAvailable) {
-    body.appendChild(renderUnverifiedBanner());
   }
 
   // "Before you book" numbered checklist (critical types drive color)
@@ -309,7 +457,7 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
     body.appendChild(renderBulletSection(titles.exceptions || "Exception rules", "rule", sections.exceptions, ann, { fullMarkdown: markdown }));
   }
 
-  // Travel advisories — bullets with verify links, collapsible
+  // Travel advisories — bullets with verify links, collapsible (open by default)
   if (sections.advisories && sections.advisories !== "None relevant") {
     body.appendChild(renderBulletSection(titles.advisories || "Travel advisories", "campaign", sections.advisories, ann, { collapsible: true, fullMarkdown: markdown }));
   }
@@ -638,12 +786,12 @@ function renderStatus(status, stay) {
   wrap.innerHTML = `
     <span class="status-badge ${cls}" id="report-status-title" role="status">
       <span class="icon-chip icon-chip--${tone}" aria-hidden="true"><span class="material-symbols-outlined">${glyph}</span></span>
-      <span>${escapeHtml(status.trim())}</span>
+      <span>${hl(status.trim())}</span>
     </span>
     ${stay && stay !== "N/A" ? `
       <div class="status-stay">
         <div class="status-stay-label">Allowed stay</div>
-        <div class="status-stay-value">${escapeHtml(stay.trim())}</div>
+        <div class="status-stay-value">${hl(stay.trim())}</div>
       </div>
     ` : ""}
   `;
@@ -651,17 +799,13 @@ function renderStatus(status, stay) {
 }
 
 function renderUnverifiedBanner() {
-  const el = document.createElement("div");
-  el.className = "report-unverified-banner";
-  el.setAttribute("role", "alert");
-  el.innerHTML = `
-    <span class="material-symbols-outlined" aria-hidden="true">cloud_off</span>
-    <div>
-      <strong>Web research did not return grounded sources.</strong>
-      Verify all claims manually with the destination embassy before booking.
-    </div>
-  `;
-  return el;
+  /* Removed in v0.9 — the always-on "Web research did not return grounded
+     sources" banner was dropped from the report UI. The Disclaimer already
+     tells the user to verify with the embassy, so the duplicate warning
+     was redundant. Kept as an empty stub for one release in case we want
+     to surface it behind a different signal (e.g. serverSearchAvailable
+     === false AND zero annotations). */
+  return document.createDocumentFragment();
 }
 
 /* v0.5 — amber "research was partial" banner. Shown when the worker came
@@ -681,11 +825,11 @@ function renderResearchWarning(message, sourcesReturned) {
 }
 
 /* v0.5 — collapsible "Research log" section listing every search query the
-   LLM actually ran. Collapsed by default; user expands to inspect. */
+   LLM actually ran. Open by default — user can collapse if not interested. */
 function renderResearchLog(queries) {
   const sec = document.createElement("details");
   sec.className = "report-section report-section--collapsible report-research-log";
-  sec.open = queries.length <= 8;  // small lists stay open; long lists collapse
+  sec.open = true;
 
   const items = queries.map(q =>
     `<li class="report-research-log-item">${escapeHtml(q)}</li>`
@@ -944,6 +1088,7 @@ function renderDocsSection(md, rawTitle, annotations, fullMarkdown) {
 function renderBulletSection(rawTitle, iconName, md, annotations, opts = {}) {
   const sec = opts.collapsible ? document.createElement("details") : document.createElement("section");
   sec.className = opts.collapsible ? "report-section report-section--collapsible" : "report-section";
+  if (opts.collapsible) sec.open = true;  // open by default; user can collapse
 
   const headingHtml = `
     <h2 class="report-section-title">
@@ -988,8 +1133,16 @@ function renderBulletSection(rawTitle, iconName, md, annotations, opts = {}) {
         li.classList.add("critical-fact");
       }
     }
-    const textNode = document.createTextNode(body);
-    li.appendChild(textNode);
+    // Highlight key tokens (Schengen, ETA, $XX USD, 15 days, etc.)
+    const html = hl(body);
+    if (html.includes("<mark")) {
+      // Insert as innerHTML (already escaped + wrapped in <mark>)
+      const span = document.createElement("span");
+      span.innerHTML = html;
+      while (span.firstChild) li.appendChild(span.firstChild);
+    } else {
+      li.appendChild(document.createTextNode(body));
+    }
 
     // Use localStart/localEnd (already body-local) for matching.
     const anns = dedupeByUrl((mapWithAnn[i]?.annotations || []).map(a => ({
@@ -1035,7 +1188,7 @@ function renderMetaSection(title, name, value) {
       ${icon(name)}
       ${escapeHtml(title)}
     </h2>
-    <div class="report-section-value">${escapeHtml(value.trim())}</div>
+    <div class="report-section-value">${hl(value.trim())}</div>
   `;
   return sec;
 }
@@ -1099,7 +1252,8 @@ function iconRaw(name) {
   return `<span class="material-symbols-outlined" aria-hidden="true">${glyph}</span>`;
 }
 
-/* ---- Critical-fact marker (strip 🚨 [TYPE] and tag the right CSS classes) ---- */
+/* ---- Critical-fact marker (strip 🚨 [TYPE] and tag the right CSS classes,
+   inject a typed Material Symbol glyph at the start of each section title). */
 function markCriticalFacts(rootEl) {
   // Section headings (h2.report-section-title)
   rootEl.querySelectorAll(".report-section-title").forEach((h2) => {
@@ -1114,6 +1268,14 @@ function markCriticalFacts(rootEl) {
         section.classList.add("is-critical");
         if (type) section.classList.add(`is-critical--${type}`);
         if (type) section.dataset.criticalType = type;
+        // Inject a typed Material Symbols glyph in front of the title text.
+        const glyph = document.createElement("span");
+        glyph.className = "material-symbols-outlined critical-title-glyph" +
+                          (type ? " critical-title-glyph--" + type : " critical-title-glyph--default");
+        glyph.textContent = "priority_high";
+        glyph.setAttribute("aria-hidden", "true");
+        // Insert at the very start of the heading (before the icon-chip).
+        h2.insertBefore(glyph, h2.firstChild);
       }
     }
   });
@@ -1379,19 +1541,24 @@ export function initReportView({ onEdit }) {
       flashBtn(root.copyBtn, "Nothing to copy");
       return;
     }
-    try {
-      const mode = await copyReport(
-        root._lastMarkdown,
-        root._lastCaveats,
-        root._lastAnnotations,
-        root._lastCritical,
-        root._lastResearch,
-      );
-      announce(mode === "rich" ? "Rich-text report copied" : "Plain-text report copied");
-      flashBtn(root.copyBtn, mode === "rich" ? "Copied!" : "Copied as text");
-    } catch (err) {
-      announce("Copy failed");
+    const result = await copyReport(
+      root._lastMarkdown,
+      root._lastCaveats,
+      root._lastAnnotations,
+      root._lastCritical,
+      root._lastResearch,
+    );
+    if (result.ok) {
+      const label = result.mode === "rich"   ? "Rich-text report copied"
+                  : result.mode === "plain"  ? "Plain-text report copied"
+                  : /* fallback */              "Report copied";
+      announce(label);
+      flashBtn(root.copyBtn, result.mode === "rich" ? "Copied!" : "Copied");
+    } else {
+      console.error("[visa-advisor] copy failed:", result.error);
+      announce("Copy failed — selecting text instead");
       flashBtn(root.copyBtn, "Copy failed");
+      selectReportBody();
     }
   });
   root.shareBtn.addEventListener("click", () => {
@@ -1467,6 +1634,15 @@ export function initReportView({ onEdit }) {
         sourcesReturned: Number.isFinite(data.sourcesReturned) ? data.sourcesReturned : 0,
         researchWarning: typeof data.researchWarning === "string" ? data.researchWarning : "",
       };
+      // Persist to route-keyed cache so the Back-to-last-report pill
+      // (and a hard refresh) can open this report without a fresh LLM call.
+      writeReportCache(input, {
+        markdown:    root._lastMarkdown,
+        caveats:     root._lastCaveats,
+        annotations: root._lastAnnotations,
+        critical:    root._lastCritical,
+        ...root._lastResearch,
+      });
       renderReport(
         root.body,
         data.markdown,
@@ -1499,10 +1675,42 @@ export function initReportView({ onEdit }) {
     if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
   }
 
+  /* v0.9 — render a previously-cached report envelope without hitting
+     the network. Mirrors runQuery's success path: hydrates the
+     report's internal state (so Copy / Edit still work), calls
+     renderReport, and shows the body. */
+  function renderCached(input, envelope) {
+    if (!envelope || typeof envelope.markdown !== "string") {
+      throw new Error("renderCached: invalid envelope");
+    }
+    root._lastInput = input;
+    root._lastMarkdown    = envelope.markdown;
+    root._lastCaveats     = envelope.caveats || "";
+    root._lastAnnotations = Array.isArray(envelope.annotations) ? envelope.annotations : [];
+    root._lastCritical    = Array.isArray(envelope.critical)     ? envelope.critical     : [];
+    root._lastResearch    = {
+      searchQueries:    Array.isArray(envelope.searchQueries) ? envelope.searchQueries : [],
+      sources:          Array.isArray(envelope.sources)       ? envelope.sources       : [],
+      sourcesReturned:  Number.isFinite(envelope.sourcesReturned) ? envelope.sourcesReturned : 0,
+      researchWarning:  typeof envelope.researchWarning === "string" ? envelope.researchWarning : "",
+    };
+    renderReport(
+      root.body,
+      root._lastMarkdown,
+      root._lastAnnotations,
+      root._lastCritical,
+      root._lastCaveats,
+      root._lastResearch,
+    );
+    show("report");
+    announce(`Showing cached report (${reportCacheAgeText(envelope)})`);
+  }
+
   return {
     show,
     setRoute,
     runQuery,
+    renderCached,
     el: root.view,
   };
 }
@@ -1511,10 +1719,29 @@ export function initReportView({ onEdit }) {
    Tiny utilities
    ────────────────────────────────────────────────────────── */
 function flashBtn(btn, text) {
+  // Debounce so rapid double-clicks don't queue overlapping flashes.
+  if (btn.dataset.flashing === "1") return;
+  btn.dataset.flashing = "1";
   const orig = btn.innerHTML;
   btn.textContent = text;
   btn.disabled = true;
-  setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 1400);
+  setTimeout(() => {
+    btn.innerHTML = orig;
+    btn.disabled = false;
+    delete btn.dataset.flashing;
+  }, 1400);
+}
+
+/* Fallback when every clipboard API path fails: highlight the report
+   body so the user can ⌘/Ctrl-C to copy it manually. */
+function selectReportBody() {
+  const body = document.querySelector("[data-report-body]");
+  if (!body) return;
+  const range = document.createRange();
+  range.selectNodeContents(body);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
 function announce(text) {
@@ -1557,13 +1784,23 @@ const CLIP = {
   c_docT:   "#1E40AF",
 };
 
+/* Rich-text copy icons — Material Symbols glyphs (color-tracked by type).
+   Each value is the full <span> markup so the pasted email/notes show a
+   clean glyph instead of an emoji that renders inconsistently across
+   clients (Outlook, Apple Mail, Slack, Notion, etc.). */
 const CLIP_ICON = {
-  money:    "💰",
-  deadline: "⏰",
-  entry:    "🚫",
-  doc:      "📄",
-  stale:    "⏳",
+  money:    `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#B71C1C;vertical-align:-3px;line-height:1;">attach_money</span>`,
+  deadline: `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#B45309;vertical-align:-3px;line-height:1;">schedule</span>`,
+  entry:    `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#B71C1C;vertical-align:-3px;line-height:1;">block</span>`,
+  doc:      `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#1E40AF;vertical-align:-3px;line-height:1;">description</span>`,
+  stale:    `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#6B7280;vertical-align:-3px;line-height:1;">history_toggle_off</span>`,
 };
+
+/* Reusable Material Symbols span helper for rich-text copies (caveats / disclaimer / etc.) */
+function ms(glyph, color) {
+  const c = color ? `color:${escapeHtmlSafe(color)};` : "";
+  return `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;${c}vertical-align:-3px;line-height:1;">${glyph}</span>`;
+}
 
 function escapeHtmlAttr(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -1602,21 +1839,15 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
 
   const sections = [];
 
-  // Zero-annotation banner.
-  if (ann.length === 0) {
-    sections.push(
-      `<div style="margin-top:16px;padding:12px 16px;background:${CLIP.c_warnBg};` +
-      `border:1px solid ${CLIP.c_warnBd};border-radius:12px;color:${CLIP.c_warnTxt};font-size:13px;">` +
-      `<strong>Web research did not return grounded sources.</strong> Verify all claims with the destination embassy before booking.` +
-      `</div>`
-    );
-  }
+  // (Zero-annotation "Web research did not return grounded sources" banner
+  //  was removed in v0.9 — the Disclaimer already says verify with the
+  //  embassy. No need to duplicate the warning on every report.)
 
   // Before you book checklist.
   if (crit.length) {
     const rows = crit.map((c, i) => {
       const type = c.type && CLIP_ICON[c.type] ? c.type : "";
-      const glyph = type ? CLIP_ICON[type] : "⚑";
+      const glyph = type ? CLIP_ICON[type] : ms("flag", "#6B4900");
       const bg = type === "money" ? CLIP.c_money
               : type === "deadline" ? CLIP.c_dead
               : type === "doc" ? CLIP.c_doc
@@ -1647,7 +1878,8 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
       `<div style="margin-top:16px;padding:20px 24px;background:${CLIP.c_warnBg};` +
       `border:1px solid ${CLIP.c_warnBd};border-radius:16px;color:${CLIP.c_warnTxt};">` +
       `<div style="font-weight:700;font-size:13px;letter-spacing:0.04em;text-transform:uppercase;` +
-      `margin-bottom:10px;">🚨 BEFORE YOU BOOK</div>` +
+      `margin-bottom:10px;display:flex;align-items:center;gap:8px;">` +
+      `${ms("priority_high", "#6B4900")}<span>BEFORE YOU BOOK</span></div>` +
       `<ol style="list-style:none;padding:0;margin:0;">${rows}</ol>` +
       `</div>`
     );
@@ -1729,7 +1961,8 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
     sections.push(
       `<div style="margin-top:16px;padding:16px 20px;background:${CLIP.c_warnBg};` +
       `border:1px solid ${CLIP.c_warnBd};border-radius:16px;color:${CLIP.c_warnTxt};">` +
-      `<div style="font-weight:700;font-size:15px;margin-bottom:8px;">⚠️ Caveats</div>` +
+      `<div style="font-weight:700;font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px;">` +
+      `${ms("warning_amber", CLIP.c_warnTxt)}<span>Caveats</span></div>` +
       `<div style="font-size:14px;line-height:1.5;white-space:pre-wrap;">${escapeHtmlSafe(caveats.trim())}</div>` +
       `</div>`
     );
@@ -1801,11 +2034,11 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
   const metaHtml = `<p style="margin-top:16px;font-size:12px;color:${CLIP.c_sub};text-align:center;">Last verified: ${escapeHtmlSafe(date)}${statsSuffix}</p>`;
   const discHtml =
     `<div style="margin-top:12px;padding:12px 16px;background:${CLIP.c_discBg};border-radius:12px;` +
-    `font-size:12px;line-height:1.5;color:${CLIP.c_sub};">` +
-    `ℹ️ This is general information based on publicly available sources as of ${escapeHtmlSafe(date)}. ` +
+    `font-size:12px;line-height:1.5;color:${CLIP.c_sub};display:flex;align-items:flex-start;gap:6px;">` +
+    `${ms("info", CLIP.c_sub)}<span>This is general information based on publicly available sources as of ${escapeHtmlSafe(date)}. ` +
     `Visa requirements change frequently and are determined solely by the destination country's authorities. ` +
     `Always verify with the destination embassy or consulate before booking travel. ` +
-    `<strong>Not legal advice. Not a substitute for an immigration attorney.</strong>` +
+    `<strong>Not legal advice. Not a substitute for an immigration attorney.</strong></span>` +
     `</div>`;
 
   return (
@@ -1825,9 +2058,9 @@ function buildReportText(md, caveats, annotations, critical, research) {
   const date = meta.lastVerified || new Date().toISOString().slice(0, 10);
   const out  = [];
 
-  if (ann.length === 0) {
-    out.push("⚠️ Web research did not return grounded sources — verify all claims with the destination embassy before booking.");
-  }
+  // (No zero-annotation banner in the plain-text copy either — the
+  //  Disclaimer section below already includes the "always verify"
+  //  reminder.)
   if (crit.length) {
     const rows = crit.map((c, i) =>
       `${i + 1}. [${(c.type || "step").toUpperCase()}] ${c.label}: ${c.value}${c.source ? ` — ${c.source}` : ""}`
@@ -1906,22 +2139,61 @@ function buildReportText(md, caveats, annotations, critical, research) {
   return out.join("\n\n");
 }
 
+/* Returns { ok, mode, error? } so callers can render the right flash.
+   Tries (1) rich HTML, (2) plain text via the async clipboard API,
+   (3) the legacy execCommand fallback for file:// origins and
+   older Safari contexts where navigator.clipboard isn't writable. */
 async function copyReport(md, caveats, annotations, critical, research) {
   const html = buildReportHtml(md, caveats, annotations, critical, research);
   const text = buildReportText(md, caveats, annotations, critical, research);
-  if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+
+  // Path 1 — rich HTML via async Clipboard API.
+  if (
+    typeof ClipboardItem !== "undefined" &&
+    navigator.clipboard?.write &&
+    window.isSecureContext
+  ) {
     try {
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          "text/html":  new Blob([html], { type: "text/html"  }),
-          "text/plain": new Blob([text], { type: "text/plain" }),
-        }),
-      ]);
-      return "rich";
-    } catch {
-      // Fall through to plain-only.
+      const item = new ClipboardItem({
+        "text/html":  new Blob([html],  { type: "text/html"  }),
+        "text/plain": new Blob([text], { type: "text/plain" }),
+      });
+      await navigator.clipboard.write([item]);
+      return { ok: true, mode: "rich" };
+    } catch (err) {
+      console.warn("[visa-advisor] rich clipboard.write failed; falling back:", err);
     }
   }
-  await navigator.clipboard.writeText(text);
-  return "plain";
+
+  // Path 2 — plain text only via the async API.
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return { ok: true, mode: "plain" };
+    } catch (err) {
+      console.warn("[visa-advisor] plain clipboard.writeText failed; falling back:", err);
+    }
+  }
+
+  // Path 3 — execCommand fallback (file://, old Safari, denied permissions).
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "0";
+    ta.style.left = "0";
+    ta.style.width = "1px";
+    ta.style.height = "1px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand && document.execCommand("copy");
+    document.body.removeChild(ta);
+    if (!ok) throw new Error("execCommand returned false");
+    return { ok: true, mode: "fallback" };
+  } catch (err) {
+    return { ok: false, mode: "none", error: err && err.message || String(err) };
+  }
 }

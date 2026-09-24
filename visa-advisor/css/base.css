@@ -34,6 +34,17 @@ mark.hl, .hl {
   border-radius: 2px;
 }
 
+/* Smaller inline highlight for inline body tokens (used inside report cards):
+   <mark class="hl-sm">Schengen</mark>, <mark class="hl-sm">~90 EUR</mark>. */
+mark.hl-sm, .hl-sm {
+  background: var(--light-green);
+  color: var(--main-dark);
+  padding: 0 0.1em;
+  border-radius: 2px;
+  font: inherit;
+  font-weight: var(--fw-semibold);
+}
+
 /* Centred section header (eyebrow + title) */
 .section-header {
   text-align: center;

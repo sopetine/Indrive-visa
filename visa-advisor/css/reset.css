@@ -18,7 +18,7 @@ body {
   font-size: var(--fs-main-body);
   line-height: var(--lh-compact-body);
   color: var(--main-dark);
-  background: var(--background-primary);
+  background: var(--soft-beige);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
