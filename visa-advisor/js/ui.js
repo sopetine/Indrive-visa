@@ -17,6 +17,29 @@ import { queryAdvisor } from "./api.js";
 
 const DISCLAIMER_VERSION = "v1"; // bump to re-prompt after content change
 
+/* ──────────────────────────────────────────────────────────
+   BUTTON RIPPLE — tactile press flourish on any .btn, delegated
+   at document level so it also covers buttons rendered later
+   (report actions, retry, clarify submit, etc).
+   ────────────────────────────────────────────────────────── */
+document.addEventListener("pointerdown", (e) => {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const btn = e.target.closest && e.target.closest(".btn");
+  if (!btn) return;
+  let ripple = btn.querySelector(".btn-ripple");
+  if (!ripple) {
+    ripple = document.createElement("span");
+    ripple.className = "btn-ripple";
+    ripple.setAttribute("aria-hidden", "true");
+    btn.appendChild(ripple);
+  }
+  ripple.classList.remove("is-active");
+  // Force reflow so re-triggering the class on rapid clicks still animates.
+  void ripple.offsetWidth;
+  ripple.classList.add("is-active");
+  setTimeout(() => ripple.classList.remove("is-active"), 180);
+});
+
 export function initModal() {
   const modal   = document.querySelector("[data-modal]");
   const ackBtn  = modal.querySelector("[data-modal-ack]");
@@ -761,7 +784,6 @@ function dedupeByUrl(list) {
 
 function renderStatus(status, stay) {
   const wrap = document.createElement("section");
-  wrap.className = "report-status";
   wrap.setAttribute("aria-labelledby", "report-status-title");
 
   const normalized = status.trim().toLowerCase();
@@ -769,6 +791,7 @@ function renderStatus(status, stay) {
   const cls = STATUS_CLASS[key];
   const tone = STATUS_TONE[key];
   const glyph = STATUS_ICON[key];
+  wrap.className = `report-status report-status--${tone}`;
 
   wrap.innerHTML = `
     <span class="status-badge ${cls}" id="report-status-title" role="status">
@@ -1793,12 +1816,12 @@ const CLIP = {
   c_accent: "#4087E1",
   c_white:  "#FFFFFF",
   c_black:  "#141414",
-  c_money:  "#FFEBEE",
-  c_moneyT: "#B71C1C",
+  c_money:  "#FFDFDE",
+  c_moneyT: "#8C2A24",
   c_dead:   "#FFF1C0",
-  c_deadT:  "#B45309",
-  c_doc:    "#E0E7FF",
-  c_docT:   "#1E40AF",
+  c_deadT:  "#8C5C00",
+  c_doc:    "#E2F4FF",
+  c_docT:   "#274D85",
 };
 
 /* Rich-text copy icons — Material Symbols glyphs (color-tracked by type).
@@ -1806,11 +1829,11 @@ const CLIP = {
    clean glyph instead of an emoji that renders inconsistently across
    clients (Outlook, Apple Mail, Slack, Notion, etc.). */
 const CLIP_ICON = {
-  money:    `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#B71C1C;vertical-align:-3px;line-height:1;">attach_money</span>`,
-  deadline: `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#B45309;vertical-align:-3px;line-height:1;">schedule</span>`,
-  entry:    `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#B71C1C;vertical-align:-3px;line-height:1;">block</span>`,
-  doc:      `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#1E40AF;vertical-align:-3px;line-height:1;">description</span>`,
-  stale:    `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#6B7280;vertical-align:-3px;line-height:1;">history_toggle_off</span>`,
+  money:    `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#8C2A24;vertical-align:-3px;line-height:1;">attach_money</span>`,
+  deadline: `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#8C5C00;vertical-align:-3px;line-height:1;">schedule</span>`,
+  entry:    `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#8C2A24;vertical-align:-3px;line-height:1;">block</span>`,
+  doc:      `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#274D85;vertical-align:-3px;line-height:1;">description</span>`,
+  stale:    `<span class="material-symbols-outlined" style="font-family:'Material Symbols Outlined';font-size:18px;color:#55575A;vertical-align:-3px;line-height:1;">history_toggle_off</span>`,
 };
 
 /* Reusable Material Symbols span helper for rich-text copies (caveats / disclaimer / etc.) */

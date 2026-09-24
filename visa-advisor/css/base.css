@@ -30,8 +30,10 @@ h4 { font-size: var(--fs-m); line-height: var(--lh-m); }
 mark.hl, .hl {
   background: var(--main-green);
   color: var(--main-dark);
-  padding: 0 0.15em;
-  border-radius: 2px;
+  padding: 0.05em 0.3em;
+  border-radius: var(--r-1);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 /* Smaller inline highlight for inline body tokens (used inside report cards):

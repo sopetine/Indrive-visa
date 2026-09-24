@@ -113,7 +113,7 @@
   to   { opacity: 1; transform: none; }
 }
 
-/* Form hero removed in v0.8 — UI is single-column, no 2-col layout, no image. */
+/* Form hero: single-column on narrow viewports, small side illustration >=900px (v0.10). */
 
 .form-intro {
   text-align: left;
@@ -122,12 +122,36 @@
 @media (min-width: 768px) {
   .form-intro { text-align: center; margin-bottom: var(--sp-5); }
 }
-.form-intro .badge { margin-bottom: var(--sp-4); }
+.form-intro-media { display: none; }
+.form-intro-badge {
+  margin-bottom: var(--sp-4);
+  background: var(--main-dark);
+  border-color: var(--main-dark);
+  color: var(--main-green);
+  font-weight: var(--fw-semibold);
+}
 .form-intro h1 {
   font-size: clamp(var(--fs-xl), 3.6vw, var(--fs-xxxl));
   line-height: 1.05;
   margin-bottom: var(--sp-3);
   letter-spacing: var(--ls-tight);
+}
+@media (min-width: 900px) {
+  .form-intro {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-8);
+    text-align: left;
+  }
+  .form-intro-media { display: block; flex-shrink: 0; }
+  .form-intro-art {
+    width: 148px;
+    height: 148px;
+    object-fit: cover;
+    border-radius: var(--r-5);
+    box-shadow: var(--shadow-m);
+  }
+  .form-intro-copy { flex: 1; }
 }
 .form-subtitle {
   color: var(--text-and-icon-secondary);
@@ -637,7 +661,7 @@
   gap: var(--sp-3);
 }
 
-/* Status hero (the big answer) — WHITE CARD with subtle shadow */
+/* Status hero (the big answer) — solid color block, indrive-style stat callout */
 .report-status {
   display: flex;
   align-items: center;
@@ -648,6 +672,21 @@
   border: 1px solid var(--border-primary);
   box-shadow: var(--shadow-s);
   border-radius: var(--r-5);
+  transition: box-shadow var(--dur-base) var(--ease);
+}
+.report-status--visa-free  { background: var(--main-green);                     border-color: var(--main-green); }
+.report-status--eta        { background: var(--light-green);                   border-color: var(--light-green); }
+.report-status--evisa      { background: var(--information-light-airlight);    border-color: var(--information-light-airlight); }
+.report-status--voa        { background: var(--information-light-earthlight);  border-color: var(--information-light-earthlight); }
+.report-status--embassy    { background: var(--information-light-chicklight);  border-color: var(--information-light-chicklight); }
+.report-status--restricted { background: var(--extensions-background-lighterror); border-color: var(--extensions-background-lighterror); }
+.report-status--visa-free:hover,
+.report-status--eta:hover,
+.report-status--evisa:hover,
+.report-status--voa:hover,
+.report-status--embassy:hover,
+.report-status--restricted:hover {
+  box-shadow: var(--shadow-m);
 }
 .status-badge {
   display: inline-flex;
@@ -669,6 +708,10 @@
 .status-badge--restricted    { background: var(--extensions-background-lighterror); color: var(--extensions-text-and-icon-error); }
 .status-badge .icon-chip { width: 32px; height: 32px; }
 .status-badge .icon-chip .material-symbols-outlined { font-size: 20px; }
+/* When the whole card takes the status color, the inner badge becomes a frosted chip on top of it */
+[class*="report-status--"] .status-badge {
+  background: rgba(255, 255, 255, 0.55);
+}
 
 .status-stay {
   text-align: right;
@@ -720,10 +763,10 @@
 .report-raw-markdown {
   margin-top: 8px;
   padding: 12px;
-  background: var(--surface-light, #fff);
+  background: var(--surface-light);
   border-radius: 6px;
   font-family: var(--font-family-mono);
-  font-size: var(--fs-sm, 13px);
+  font-size: var(--fs-sm);
   line-height: var(--lh-ml);
   white-space: pre-wrap;
   word-break: break-word;
@@ -863,16 +906,19 @@
 /* Disclaimer (always at bottom) — sits as a soft aside on the beige page */
 .report-disclaimer {
   margin-top: var(--sp-6);
-  padding: var(--sp-4);
-  background: transparent;
-  border-radius: var(--r-3);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--main-dark);
+  border-radius: var(--r-4);
   font-size: var(--fs-xs);
   line-height: var(--lh-m);
-  color: var(--text-and-icon-secondary);
+  color: rgba(255, 255, 255, 0.72);
+}
+.report-disclaimer strong {
+  color: var(--main-green);
 }
 .report-disclaimer .material-symbols-outlined {
   font-size: 14px;
-  color: var(--text-and-icon-secondary);
+  color: var(--main-green);
   vertical-align: -2px;
   margin-right: 4px;
 }
@@ -1001,8 +1047,8 @@
   margin-top: var(--sp-4);
   padding: var(--sp-5) var(--sp-5);
   background: var(--extensions-background-lightwarning, #FFF1C0);
-  border: 1px solid var(--extensions-border-warning, #FFC13C);
-  border-left: 4px solid var(--extensions-border-warning, #FFC13C);
+  border: 1px solid var(--extensions-border-warning);
+  border-left: 4px solid var(--extensions-border-warning);
   border-radius: var(--r-3, 16px);
   color: var(--information-dark-chickdark, #8C5C00);
 }
@@ -1044,7 +1090,7 @@
     grid-template-columns: 1fr 1fr;
   }
   .report-critical-item:nth-child(odd) {
-    border-right: 1px solid var(--extensions-border-warning, #FFC13C);
+    border-right: 1px solid var(--extensions-border-warning);
   }
 }
 .report-critical-item {
@@ -1102,14 +1148,14 @@
 .critical-fact {
   position: relative;
   padding-left: var(--sp-3);
-  border-left: 3px solid var(--extensions-border-warning, #FFC13C);
+  border-left: 3px solid var(--extensions-border-warning);
   background: rgba(255, 241, 192, 0.35);
 }
 
 /* ----- Section critical accent (heading-level 🚨) ----- */
 .report-section.is-critical {
-  border: 1px solid var(--extensions-border-warning, #FFC13C);
-  border-left: 4px solid var(--extensions-border-warning, #FFC13C);
+  border: 1px solid var(--extensions-border-warning);
+  border-left: 4px solid var(--extensions-border-warning);
   border-radius: var(--r-2, 12px);
   padding: var(--sp-4);
   background: rgba(255, 241, 192, 0.18);
@@ -1129,11 +1175,11 @@
   line-height: 1;
 }
 .critical-title-glyph--money,
-.critical-title-glyph--default { color: #D32F2F; }
-.critical-title-glyph--deadline { color: #B45309; }
-.critical-title-glyph--entry    { color: #B71C1C; }
-.critical-title-glyph--doc      { color: #1E40AF; }
-.critical-title-glyph--stale    { color: #6B7280; }
+.critical-title-glyph--default { color: var(--information-medium-crab); }
+.critical-title-glyph--deadline { color: var(--information-dark-chickdark); }
+.critical-title-glyph--entry    { color: var(--information-dark-crabdark); }
+.critical-title-glyph--doc      { color: var(--information-dark-whaledark); }
+.critical-title-glyph--stale    { color: var(--information-dark-pandadark); }
 
 /* ----- Citation link (inline [N]) ----- */
 .cite-link {
@@ -1426,7 +1472,7 @@ li[data-critical-type] .verify-link {
   padding: 14px 18px;
   background: var(--extensions-background-lightwarning, #FFF1C0);
   border: 0;
-  border-left: 4px solid var(--extensions-border-warning, #FFC13C);
+  border-left: 4px solid var(--extensions-border-warning);
   border-radius: var(--r-3);
   color: var(--information-dark-chickdark, #8C5C00);
   display: flex;
@@ -1446,7 +1492,7 @@ li[data-critical-type] .verify-link {
   padding: 14px 18px;
   background: var(--extensions-background-lightwarning, #FFF1C0);
   border: 0;
-  border-left: 4px solid var(--extensions-border-warning, #FFC13C);
+  border-left: 4px solid var(--extensions-border-warning);
   border-radius: var(--r-3);
   color: var(--information-dark-chickdark, #8C5C00);
   display: flex;
@@ -1466,10 +1512,10 @@ li[data-critical-type] .verify-link {
   margin-left: 8px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--extensions-background-lightneutral, #F4F3D8);
+  background: var(--extensions-background-lightneutral);
   font-size: 11px;
   font-weight: 600;
-  color: var(--extensions-text-neutral, #6A6B6E);
+  color: var(--extensions-text-neutral);
   letter-spacing: 0.02em;
   text-transform: none;
 }
@@ -1480,7 +1526,7 @@ li[data-critical-type] .verify-link {
   padding: 0;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 13px;
-  color: var(--extensions-text-sub, #6A6B6E);
+  color: var(--extensions-text-sub);
   line-height: 1.5;
 }
 .report-research-log-item {
@@ -1574,11 +1620,11 @@ li[data-critical-type] .verify-link {
 .critical-step-icon .material-symbols-outlined {
   font-size: 20px;
 }
-.critical-step-icon.icon-chip--critical-money    { background: #FFEBEE; color: #B71C1C; }
-.critical-step-icon.icon-chip--critical-deadline { background: #FFF1C0; color: #B45309; }
-.critical-step-icon.icon-chip--critical-entry    { background: #FFE5E5; color: #B71C1C; }
-.critical-step-icon.icon-chip--critical-doc      { background: #E0E7FF; color: #1E40AF; }
-.critical-step-icon.icon-chip--critical-stale    { background: #F3F4F6; color: #6B7280; }
+.critical-step-icon.icon-chip--critical-money    { background: var(--information-light-crablight); color: var(--information-dark-crabdark); }
+.critical-step-icon.icon-chip--critical-deadline { background: var(--information-light-chicklight); color: var(--information-dark-chickdark); }
+.critical-step-icon.icon-chip--critical-entry    { background: var(--information-light-crablight); color: var(--information-dark-crabdark); }
+.critical-step-icon.icon-chip--critical-doc      { background: var(--information-light-whalelight); color: var(--information-dark-whaledark); }
+.critical-step-icon.icon-chip--critical-stale    { background: var(--information-light-pandalight); color: var(--information-dark-pandadark); }
 
 .critical-step-label {
   font-size: 11px;
@@ -1655,11 +1701,11 @@ li[data-critical-type] .verify-link {
 }
 
 /* Per-type left border accent on each step card */
-.critical-step--money    { border-left: 4px solid #D32F2F; }
-.critical-step--deadline { border-left: 4px solid #B45309; }
-.critical-step--entry    { border-left: 4px solid #B71C1C; }
-.critical-step--doc      { border-left: 4px solid #1E40AF; }
-.critical-step--stale    { border-left: 4px solid #6B7280; }
+.critical-step--money    { border-left: 4px solid var(--information-medium-crab); }
+.critical-step--deadline { border-left: 4px solid var(--information-medium-chick); }
+.critical-step--entry    { border-left: 4px solid var(--information-medium-crab); }
+.critical-step--doc      { border-left: 4px solid var(--information-medium-whale); }
+.critical-step--stale    { border-left: 4px solid var(--information-medium-panda); }
 
 /* Mobile: critical-step grid collapses */
 @media (max-width: 539px) {
@@ -1685,41 +1731,41 @@ li[data-critical-type] .verify-link {
 
 /* ----- Section-level typed critical accent (driven by heading 🚨 [TYPE] prefix) ----- */
 .report-section.is-critical {
-  border: 1px solid var(--extensions-border-warning, #FFC13C);
-  border-left: 4px solid var(--extensions-border-warning, #FFC13C);
+  border: 1px solid var(--extensions-border-warning);
+  border-left: 4px solid var(--extensions-border-warning);
   border-radius: var(--r-2, 12px);
   padding: var(--sp-4);
   background: rgba(255, 241, 192, 0.16);
 }
-.report-section.is-critical--money    { border-color: #D32F2F; border-left-color: #D32F2F; background: rgba(255, 235, 238, 0.30); }
-.report-section.is-critical--deadline { border-color: #B45309; border-left-color: #B45309; background: rgba(255, 241, 192, 0.30); }
-.report-section.is-critical--entry    { border-color: #B71C1C; border-left-color: #B71C1C; background: rgba(255, 229, 229, 0.30); }
-.report-section.is-critical--doc      { border-color: #1E40AF; border-left-color: #1E40AF; background: rgba(224, 231, 255, 0.30); }
-.report-section.is-critical--stale    { border-color: #6B7280; border-left-color: #6B7280; background: rgba(243, 244, 246, 0.30); }
+.report-section.is-critical--money    { border-color: var(--information-medium-crab); border-left-color: var(--information-medium-crab); background: var(--information-light-crablight); }
+.report-section.is-critical--deadline { border-color: var(--information-medium-chick); border-left-color: var(--information-medium-chick); background: var(--information-light-chicklight); }
+.report-section.is-critical--entry    { border-color: var(--information-medium-crab); border-left-color: var(--information-medium-crab); background: var(--information-light-crablight); }
+.report-section.is-critical--doc      { border-color: var(--information-medium-whale); border-left-color: var(--information-medium-whale); background: var(--information-light-whalelight); }
+.report-section.is-critical--stale    { border-color: var(--information-medium-panda); border-left-color: var(--information-medium-panda); background: var(--information-light-pandalight); }
 
 .report-section.is-critical .report-section-title {
   color: #6B4900;
 }
-.report-section.is-critical--money    .report-section-title { color: #B71C1C; }
-.report-section.is-critical--deadline .report-section-title { color: #B45309; }
-.report-section.is-critical--entry    .report-section-title { color: #B71C1C; }
-.report-section.is-critical--doc      .report-section-title { color: #1E40AF; }
-.report-section.is-critical--stale    .report-section-title { color: #6B7280; }
+.report-section.is-critical--money    .report-section-title { color: var(--information-dark-crabdark); }
+.report-section.is-critical--deadline .report-section-title { color: var(--information-dark-chickdark); }
+.report-section.is-critical--entry    .report-section-title { color: var(--information-dark-crabdark); }
+.report-section.is-critical--doc      .report-section-title { color: var(--information-dark-whaledark); }
+.report-section.is-critical--stale    .report-section-title { color: var(--information-dark-pandadark); }
 
 /* Inline critical-fact bullets inside docs/exceptions/advisories */
 .critical-fact {
   position: relative;
   padding: 6px 10px 6px 12px;
-  border-left: 3px solid var(--extensions-border-warning, #FFC13C);
+  border-left: 3px solid var(--extensions-border-warning);
   background: rgba(255, 241, 192, 0.30);
   border-radius: 0 var(--r-1, 6px) var(--r-1, 6px) 0;
   list-style: none;
 }
-.critical-fact--money    { border-left-color: #D32F2F; background: rgba(255, 235, 238, 0.50); }
-.critical-fact--deadline { border-left-color: #B45309; background: rgba(255, 241, 192, 0.50); }
-.critical-fact--entry    { border-left-color: #B71C1C; background: rgba(255, 229, 229, 0.50); }
-.critical-fact--doc      { border-left-color: #1E40AF; background: rgba(224, 231, 255, 0.50); }
-.critical-fact--stale    { border-left-color: #6B7280; background: rgba(243, 244, 246, 0.50); }
+.critical-fact--money    { border-left-color: var(--information-medium-crab); background: var(--information-light-crablight); }
+.critical-fact--deadline { border-left-color: var(--information-medium-chick); background: var(--information-light-chicklight); }
+.critical-fact--entry    { border-left-color: var(--information-medium-crab); background: var(--information-light-crablight); }
+.critical-fact--doc      { border-left-color: var(--information-medium-whale); background: var(--information-light-whalelight); }
+.critical-fact--stale    { border-left-color: var(--information-medium-panda); background: var(--information-light-pandalight); }
 
 /* ----- Progress strip live label (rotating message) ----- */
 .action-bar-progress-live {
@@ -1738,7 +1784,7 @@ li[data-critical-type] .verify-link {
   width: 8px;
   height: 8px;
   border-radius: 9999px;
-  background: var(--extensions-border-warning, #FFC13C);
+  background: var(--extensions-border-warning);
   animation: pulse-dot 1.4s ease-in-out infinite;
 }
 @keyframes pulse-dot {
@@ -1814,12 +1860,12 @@ li[data-critical-type] .verify-link {
   .radio:has(input:checked) { border-color: var(--main-green); }
 
   .disclosure-panel { background: #0F0F0F; }
-  .status-badge--visa-free     { background: var(--main-green);              color: var(--main-dark); }
-  .status-badge--eta           { background: var(--main-dark-bg);            color: var(--main-white); }
-  .status-badge--evisa         { background: #0A2540;                        color: #6CB6FF; }
-  .status-badge--voa           { background: #1F3A0A;                        color: #8FD858; }
-  .status-badge--embassy       { background: #3F2E0A;                        color: #FFCB66; }
-  .status-badge--restricted    { background: #3F1212;                        color: #FF8A85; }
+  .report-status .status-badge--visa-free     { background: var(--main-green);              color: var(--main-dark); }
+  .report-status .status-badge--eta           { background: var(--main-dark-bg);            color: var(--main-white); }
+  .report-status .status-badge--evisa         { background: #0A2540;                        color: #6CB6FF; }
+  .report-status .status-badge--voa           { background: #1F3A0A;                        color: #8FD858; }
+  .report-status .status-badge--embassy       { background: #3F2E0A;                        color: #FFCB66; }
+  .report-status .status-badge--restricted    { background: #3F1212;                        color: #FF8A85; }
 
   .icon-chip--visa-free  { background: var(--main-green); color: var(--main-dark); }
   .icon-chip--eta        { background: var(--main-dark-bg); color: var(--main-white); }

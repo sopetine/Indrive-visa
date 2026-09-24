@@ -58,6 +58,11 @@
   --extensions-background-lighterror: #FFDFDE;
   --extensions-background-lightsuccess:#E7FFAF;
   --extensions-background-lightwarning:#FFF1C0;
+  --extensions-background-lightneutral:#F4F3D8;
+  --extensions-border-warning:  #FFC13C;
+  --extensions-text-neutral:    #6A6B6E;
+  --extensions-text-sub:        #6A6B6E;
+  --surface-light:              #FFFFFF;
 
   /* Information triad (light/medium/dark per hue) */
   --information-light-airlight:      #E2F4FF;
