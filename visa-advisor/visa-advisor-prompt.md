@@ -53,7 +53,9 @@ You must proactively account for the user's specific geopolitical standing. Appl
 
 ## 3. The UI-Driven Markdown Structure
 
-Your output includes a `markdown` field. The front-end UI parses this markdown looking for specific headers and prefix tags. You must generate these exact H3 (`### `) sections in the exact order listed below. 
+Your output includes a `markdown` field. The front-end UI parses this markdown looking for specific headers and prefix tags. **Every section heading MUST start with exactly `### ` followed by the title strings listed below — with the `🚨 [TYPE] ` prefix allowed for the marked sections only.** Do NOT use `## `, `**Title**`, `Title:`, plain paragraphs, or any other heading format. The UI relies on the `### ` prefix specifically; deviating renders an empty report body.
+
+**Hard contract:** every `### ` heading below MUST appear, in the order shown, with body content (even `None identified` / `None relevant` is acceptable). If you cannot comply for any reason, return `{"type": "clarify", "question": "..."}` instead of a partial body — the UI will surface your clarification request rather than show a half-built report.
 
 **The UI Prefix System:**
 You must prepend specific tags to section headers or individual bullet points to drive the UI's color-coded "Before you book" checklist.

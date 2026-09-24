@@ -402,15 +402,69 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
 function parseSections(md) {
   const out = {};
   const titles = {};
-  const blocks = md.split(/^###\s+/m).slice(1);
-  blocks.forEach((block) => {
-    const newline = block.indexOf("\n");
-    const title = block.slice(0, newline).trim();
-    const body  = block.slice(newline + 1).trim();
+  if (!md) { out.__titles = titles; return out; }
+
+  /* Layer-1 — strict path: split on `\n### ` (the prompt's H3 contract). */
+  const h3 = md.split(/^###\s+/m).slice(1);
+  h3.forEach((block) => {
+    const nl = block.indexOf("\n");
+    const title = block.slice(0, nl).trim();
+    const body  = block.slice(nl + 1).trim();
     const slug  = slugify(title);
-    out[slug]    = body;
-    titles[slug] = title;
+    if (slug && slug !== title && body) {
+      out[slug]    = body;
+      titles[slug] = title;
+    }
   });
+
+  /* Layer-2 — tolerant fallbacks. Only run if the strict path found
+     none of the canonical sections. Lets the report render when the
+     LLM emits a slightly different heading style. */
+  const CANONICAL = ["visaStatus","allowedStay","passportValidity","fee","processingTime","requiredDocs","officialUrl","exceptions","advisories","lastVerified"];
+  const filled = CANONICAL.filter((k) => out[k] && String(out[k]).trim());
+  if (!filled.length) {
+    /* Fallback A — `## ` H2 headings */
+    const h2 = md.split(/^##\s+/m).slice(1);
+    h2.forEach((block) => {
+      const nl = block.indexOf("\n");
+      const title = block.slice(0, nl).trim();
+      const body  = block.slice(nl + 1).trim();
+      const slug  = slugify(title);
+      if (CANONICAL.includes(slug) && body && !out[slug]) {
+        out[slug]    = body;
+        titles[slug] = title;
+      }
+    });
+  }
+  if (!filled.length) {
+    /* Fallback B — `**Section name**` bold paragraphs immediately followed
+       by body content (separated by a blank line or newline). */
+    const boldRe = /^\*\*([^*]+)\*\*\s*[:\n]+([\s\S]*?)(?=^\*\*[^*]+\*\*|\Z)/gm;
+    let m;
+    while ((m = boldRe.exec(md)) !== null) {
+      const title = m[1].trim();
+      const body  = (m[2] || "").trim();
+      const slug  = slugify(title);
+      if (CANONICAL.includes(slug) && body && !out[slug]) {
+        out[slug]    = body;
+        titles[slug] = title;
+      }
+    }
+  }
+  if (!filled.length) {
+    /* Fallback C — plain text "Section name:" followed by newline + body. */
+    const colonRe = /^([A-Z][^:\n]{2,60}):\s*\n([\s\S]*?)(?=^[A-Z][^:\n]{2,60}:\s*\n|\Z)/gm;
+    let m;
+    while ((m = colonRe.exec(md)) !== null) {
+      const title = m[1].trim();
+      const body  = (m[2] || "").trim();
+      const slug  = slugify(title);
+      if (CANONICAL.includes(slug) && body && !out[slug]) {
+        out[slug]    = body;
+        titles[slug] = title;
+      }
+    }
+  }
   out.__titles = titles;
   return out;
 }
@@ -759,7 +813,7 @@ function renderSourcesSection(sources, citedUrls) {
      bypass CORS preflight but we still observe success/error.
    - Updates each row's [data-reach] span and the summary line. */
 async function verifySources(sectionEl, sources) {
-  const rows = Array.from(sectionEl.querySelectorAll(".report-source-item[data-source-url]"));
+  const rows = Array.from(sectionEl.querySelectorAll(".report-source-tag[data-source-url]"));
   const summary = sectionEl.querySelector("[data-reach-summary]");
   const counts = { ok: 0, warn: 0, err: 0, pending: rows.length };
 
