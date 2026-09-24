@@ -1479,6 +1479,37 @@ li[data-critical-type] .verify-link {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
+/* v0.7.1 — reachability probe dot (L3). Inline badge on each source row. */
+.report-source-item {
+  position: relative;
+}
+.report-source-reach {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #C9CACC;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.7);
+  transition: background-color 200ms ease;
+}
+.report-source-reach[data-reach="ok"]      { background: #2EAD2E; }
+.report-source-reach[data-reach="warn"]    { background: #E6A700; }
+.report-source-reach[data-reach="err"]     { background: #D6322B; }
+.report-source-reach[data-reach="pending"] { background: #C9CACC; animation: reachPulse 1.4s ease-in-out infinite; }
+@keyframes reachPulse {
+  0%,100% { opacity: 0.5; }
+  50%     { opacity: 1.0; }
+}
+.report-source-reach-summary {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--extensions-text-sub, #6A6B6E);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+.report-source-reach-summary:empty { display: none; }
+
 /* ----- Before-you-book checklist ----- */
 .before-you-book {
   margin-top: var(--sp-5);

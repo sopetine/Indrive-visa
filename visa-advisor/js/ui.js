@@ -320,17 +320,29 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
   }
 
   // Sources (N) — deduped URLs grouped by domain (v0.5)
+  let sourcesSection = null;
   if (sources.length) {
-    body.appendChild(renderSourcesSection(sources));
+    sourcesSection = renderSourcesSection(sources);
+    body.appendChild(sourcesSection);
+  }
+
+  // v0.7.1 — async HEAD reachability probe (L3). Runs after render so the
+  // user sees the report immediately and the dots fill in as probes resolve.
+  if (sourcesSection) {
+    verifySources(sourcesSection, sources);
   }
 
   // Last verified + research stats line
   const metaLineParts = [];
   if (meta.lastVerified)         metaLineParts.push(`Last verified: ${meta.lastVerified}`);
+  const citedCount = new Set(
+    crit.map((c) => (c.source || "").trim()).filter((u) => /^https?:\/\//.test(u))
+  ).size;
   if (searchQs.length || sources.length || ann.length) {
     metaLineParts.push(renderResearchMetaLine({
-      queries: searchQs.length,
-      sources: sources.length,
+      queries:        searchQs.length,
+      citedSources:   citedCount,
+      sources:        sources.length,
       inlineCitations: ann.length,
     }));
   }
@@ -622,9 +634,10 @@ function renderSourcesSection(sources) {
       const title = (s.title || s.url || "").trim();
       const safeTitle = escapeHtml(title);
       const safeUrl = escapeHtmlAttr(s.url);
-      return `<li class="report-source-item">
+      return `<li class="report-source-item" data-source-url="${safeUrl}">
         <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="report-source-link">${safeTitle}</a>
         <div class="report-source-url">${safeUrl}</div>
+        <span class="report-source-reach" data-reach="pending" aria-label="Reachability: pending" title="Reachability: pending"></span>
       </li>`;
     }).join("");
     return `<div class="report-source-group">
@@ -644,8 +657,71 @@ function renderSourcesSection(sources) {
       <span class="report-section-count">${sources.length} ${sources.length === 1 ? "source" : "sources"}</span>
     </h2>
     <div class="report-source-groups">${groupsHtml}</div>
+    <p class="report-source-reach-summary" data-reach-summary>Reachability: probing 0 / ${sources.length} …</p>
   `;
   return sec;
+}
+
+/* v0.7.1 — L3 reachability probe.
+   - Concurrency cap 5, per-request timeout 3s.
+   - Uses fetch({method:'HEAD', mode:'no-cors'}) so opaque responses
+     bypass CORS preflight but we still observe success/error.
+   - Updates each row's [data-reach] span and the summary line. */
+async function verifySources(sectionEl, sources) {
+  const rows = Array.from(sectionEl.querySelectorAll(".report-source-item[data-source-url]"));
+  const summary = sectionEl.querySelector("[data-reach-summary]");
+  const counts = { ok: 0, warn: 0, err: 0, pending: rows.length };
+
+  function tally() {
+    if (summary) summary.textContent =
+      `Reachability: ${counts.ok} / ${sources.length} sources OK · ` +
+      `${counts.err} failed · ${counts.warn} uncertain`;
+  }
+  tally();
+
+  const queue = sources.map((s, i) => ({ s, row: rows[i] })).filter((x) => x.row);
+  const inFlight = new Set();
+  const PROBE_TIMEOUT_MS = 3000;
+  const MAX_IN_FLIGHT = 5;
+
+  async function probeOne(url) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT_MS);
+    try {
+      await fetch(url, { method: "HEAD", mode: "no-cors", signal: ctrl.signal, cache: "no-store" });
+      return "ok";          // opaqueresponse.ok is impossible to read; assume ok on no throw
+    } catch (err) {
+      if (err && err.name === "AbortError") return "warn";
+      return "err";         // DNS / network / CORS preflight failure
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async function pump() {
+    while (queue.length) {
+      while (inFlight.size >= MAX_IN_FLIGHT) {
+        await Promise.race(inFlight);
+      }
+      const next = queue.shift();
+      if (!next) break;
+      const p = probeOne(next.s.url).then((status) => {
+        const dot = next.row.querySelector("[data-reach]");
+        if (dot) {
+          dot.dataset.reach = status;
+          dot.setAttribute("aria-label", `Reachability: ${status}`);
+          dot.title = `Reachability: ${status}`;
+        }
+        counts.pending--;
+        counts[status] = (counts[status] || 0) + 1;
+        tally();
+        inFlight.delete(p);
+      });
+      inFlight.add(p);
+    }
+  }
+
+  await pump();
 }
 
 function groupSourcesByDomain(sources) {
@@ -658,11 +734,12 @@ function groupSourcesByDomain(sources) {
   return out;
 }
 
-/* v0.5 — small meta-line fragment: "X searches · Y sources · Z citations". */
-function renderResearchMetaLine({ queries, sources, inlineCitations }) {
+/* v0.5 — small meta-line fragment. v0.7.1 added citedSources split. */
+function renderResearchMetaLine({ queries, citedSources, sources, inlineCitations }) {
   const parts = [];
   if (queries)         parts.push(`<strong>${queries}</strong> ${queries === 1 ? "search" : "searches"}`);
-  if (sources)         parts.push(`<strong>${sources}</strong> ${sources === 1 ? "source" : "sources"}`);
+  if (citedSources)   parts.push(`<strong>${citedSources}</strong> cited`);
+  if (sources)         parts.push(`<strong>${sources}</strong> surveyed`);
   if (inlineCitations) parts.push(`<strong>${inlineCitations}</strong> inline ${inlineCitations === 1 ? "citation" : "citations"}`);
   if (!parts.length)   return "";
   return `Research: ${parts.join(" · ")}`;
@@ -1080,10 +1157,10 @@ export function initReportView({ onEdit }) {
   };
 
   const PROGRESS_MESSAGES = [
-    "Researching Wikipedia visa policy",
-    "Checking IATA Travel Centre",
-    "Verifying with destination .gov site",
+    "Loading advisor knowledge base",
+    "Running server-side web search (Tavily)",
     "Cross-checking travel advisories",
+    "Drafting visa report",
     "Compiling your report",
   ];
   let progressTimer = null;
@@ -1223,6 +1300,7 @@ export function initReportView({ onEdit }) {
     root._lastInput = input;
     show("loading");
     startProgress();
+    setTimeout(() => setProgress("consult"), 1200);
     try {
       const data = await queryAdvisor(input);
       stopProgress();   // helper defined below
