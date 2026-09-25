@@ -2,9 +2,9 @@
    MAIN — bootstrap, hash router, view orchestration
    ============================================================ */
 
-import { initModal } from "./ui.js?v=20260925-3";
-import { initForm } from "./ui.js?v=20260925-3";
-import { initReportView, readReportCache } from "./ui.js?v=20260925-3";
+import { initModal } from "./ui.js?v=20260925-4";
+import { initForm } from "./ui.js?v=20260925-4";
+import { initReportView, readReportCache } from "./ui.js?v=20260925-4";
 
 function start() {
   let formApi, reportApi;
