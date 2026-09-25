@@ -48,12 +48,18 @@ function start() {
   function showForm(prefill = {}) {
     reportApi.el.hidden = true;
     document.querySelector('[data-view="form"]').hidden = false;
-    if (prefill.nat) formApi.setFormData({
-      nationality: prefill.nat,
-      from:        prefill.from,
-      destination: prefill.dst,
-      comments:    prefill.comments,
-    });
+    let saved = {};
+    try {
+      saved = JSON.parse(sessionStorage.getItem("visa-advisor.last-input")
+        || localStorage.getItem("visa-advisor.last-input") || "{}");
+    } catch {}
+    const values = {
+      nationality: prefill.nat || saved.nationality,
+      from:        prefill.from || prefill.arr || saved.from || saved.arrival,
+      destination: prefill.dst || saved.destination,
+      comments:    prefill.comments || saved.comments,
+    };
+    if (Object.values(values).some(Boolean)) formApi.setFormData(values);
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 
@@ -85,6 +91,7 @@ function start() {
       const cached = readReportCache(input);
       if (cached) {
         try {
+          reportApi.hideProgress();
           reportApi.renderCached(input, cached);
           return;
         } catch (err) {
@@ -104,6 +111,7 @@ function start() {
         const cachedReport = readReportCache(parsed);
         if (cachedReport) {
           try {
+            reportApi.hideProgress();
             reportApi.renderCached(parsed, cachedReport);
             return;
           } catch (err) {

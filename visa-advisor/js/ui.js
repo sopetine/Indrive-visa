@@ -1517,6 +1517,9 @@ export function initReportView({ onEdit }) {
   let progressTimer = null;
   let progressIdx   = 0;
   let progressStartedAt = 0;
+  let activeQueryKey = "";
+  let activeQueryPromise = null;
+  let querySequence = 0;
 
   function setProgressMessage(text) {
     if (root.progressLabel) root.progressLabel.textContent = text;
@@ -1607,11 +1610,23 @@ export function initReportView({ onEdit }) {
   });
   root.shareBtn.addEventListener("click", () => {
     const url = window.location.href;
-    navigator.clipboard.writeText(url).then(() => {
+    if (navigator.share) {
+      navigator.share({ title: "Visa Advisor report", url }).catch((err) => {
+        if (err.name !== "AbortError") copyShareUrl(url);
+      });
+    } else copyShareUrl(url);
+  });
+
+  async function copyShareUrl(url) {
+    try {
+      await navigator.clipboard.writeText(url);
       announce("Share link copied to clipboard");
       flashBtn(root.shareBtn, "Link copied!");
-    });
-  });
+    } catch {
+      announce("Could not copy the share link");
+      flashBtn(root.shareBtn, "Copy failed");
+    }
+  }
   root.clarifyForm.addEventListener("submit", (e) => {
     e.preventDefault();
     const answer = root.clarifyForm.querySelector("#input-clarify").value.trim();
@@ -1653,12 +1668,29 @@ export function initReportView({ onEdit }) {
   }
 
   async function runQuery(input) {
+    const queryKey = [input.nationality, input.from, input.destination, input.comments, input.clarify]
+      .map((value) => String(value || "").trim().toLowerCase()).join("|");
+    if (activeQueryKey === queryKey && activeQueryPromise) return activeQueryPromise;
+    activeQueryKey = queryKey;
+    const sequence = ++querySequence;
+    activeQueryPromise = executeQuery(input, sequence);
+    try {
+      return await activeQueryPromise;
+    } finally {
+      if (activeQueryKey === queryKey) activeQueryPromise = null;
+    }
+  }
+
+  async function executeQuery(input, sequence) {
     root._lastInput = input;
     show("loading");
     startProgress();
-    setTimeout(() => setProgress("consult"), 1200);
+    setTimeout(() => {
+      if (sequence === querySequence) setProgress("consult");
+    }, 1200);
     try {
       const data = await queryAdvisor(input);
+      if (sequence !== querySequence) return;
       stopProgress();   // helper defined below
       setProgress("compile");
       showProgress(100);
@@ -1702,6 +1734,7 @@ export function initReportView({ onEdit }) {
       hideProgress();
       announce("Visa report ready");
     } catch (err) {
+      if (sequence !== querySequence) return;
       hideProgress();
       const isTimeout = err.code === "TIMEOUT" || err.name === "AbortError";
       const isPrompt  = err.code === "PROMPT_LOAD";
@@ -1752,6 +1785,7 @@ export function initReportView({ onEdit }) {
 
   return {
     show,
+    hideProgress,
     setRoute,
     runQuery,
     renderCached,

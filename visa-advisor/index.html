@@ -37,7 +37,7 @@
        ============================================================ -->
   <header class="site-header site-header--advisor">
     <div class="container nav">
-      <a href="https://sopetine.github.io/Indrive-visa/" target="_blank" rel="noopener noreferrer" class="logo" aria-label="Visa Advisor — open project home">
+      <a href="#/" class="logo" aria-label="Visa Advisor — go to start">
         <img src="images/logo-icon.svg" alt="" class="logo-mark" width="32" height="32">
         <span class="logo-text">Visa Advisor</span>
       </a>
@@ -58,7 +58,7 @@
             <mark class="hl">in seconds.</mark>
           </h1>
           <p class="form-subtitle form-subtitle--sm">
-            Enter your passport, where you're based, and where you're going. Get the visa status, allowed stay, fees, processing time, and required documents — researched live from Wikipedia, IATA, and official <code>.gov</code> sites. Every bullet links back to its verified source.
+            Check entry requirements for your trip, with live research and links to the sources.
           </p>
         </header>
 
@@ -76,7 +76,7 @@
           <!-- Nationality -->
           <div class="field" data-field="nationality">
             <label for="input-nationality" class="field-label">
-              Nationality <span class="req" aria-hidden="true">*</span>
+                Passport nationality <span class="req" aria-hidden="true">*</span>
             </label>
             <input
               type="text"
@@ -85,7 +85,9 @@
               class="text-input"
               autocomplete="off"
               placeholder="e.g. Russian, American, Brazilian…"
+              aria-describedby="nationality-hint"
               required>
+            <p class="field-hint" id="nationality-hint">Use the nationality shown on the passport you’ll travel with.</p>
             <p class="field-error" data-error-for="nationality" hidden></p>
           </div>
 
@@ -93,7 +95,7 @@
           <div class="field-row" data-field-row="from-dst">
             <div class="field" data-field="from">
               <label for="input-from" class="field-label">
-                From <span class="req" aria-hidden="true">*</span>
+                Based in <span class="req" aria-hidden="true">*</span>
               </label>
               <input
                 type="text"
@@ -101,13 +103,15 @@
                 name="from"
                 class="text-input"
                 autocomplete="off"
-                placeholder="e.g. Georgia, Turkey…"
+                placeholder="Country where you live or will apply from"
+                aria-describedby="from-hint"
                 required>
+              <p class="field-hint" id="from-hint">Your current country of residence or visa application.</p>
               <p class="field-error" data-error-for="from" hidden></p>
             </div>
             <div class="field" data-field="destination">
               <label for="input-destination" class="field-label">
-                Destination <span class="req" aria-hidden="true">*</span>
+                Destination city <span class="req" aria-hidden="true">*</span>
               </label>
               <input
                 type="text"
@@ -116,7 +120,9 @@
                 class="text-input"
                 autocomplete="off"
                 placeholder="e.g. Tbilisi, Istanbul…"
+                aria-describedby="destination-hint"
                 required>
+              <p class="field-hint" id="destination-hint">The city you plan to visit.</p>
               <p class="field-error" data-error-for="destination" hidden></p>
             </div>
           </div>
