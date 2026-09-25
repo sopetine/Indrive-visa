@@ -255,7 +255,7 @@ const CRITICAL_TYPE_META = {
  *   "🚨 [MONEY] Fee"
  *   "🚨 Fee"             (v0.3 compat — no type)
  * The [TYPE] group is optional; type is undefined for untyped markers. */
-const CRITICAL_HEADING_RE = /^[\s\u00A0]*(?:🚨|[\p{Extended_Pictographic}\p{Regional_Indicator}\uFE0F\u200D]+)(?:\s*\[(?<type>MONEY|DEADLINE|ENTRY|DOC|STALE)\])?\s*/iu;
+const CRITICAL_HEADING_RE = /^[\s\u00A0]*(?:(?:🚨|[\p{Extended_Pictographic}\p{Regional_Indicator}\uFE0F\u200D]+)\s*)?\[(MONEY|DEADLINE|ENTRY|DOC|STALE)\]\s*|^[\s\u00A0]*🚨\s*/iu;
 
 /* ------------------------------------------------------------
    v0.9 — inline phrase highlighter
@@ -630,9 +630,7 @@ function parseSections(md) {
 function slugify(t) {
   // Strip leading 🚨 and [TYPE] decorations before tokenising, so
   // "🚨 [MONEY] Fee" → slug "fee", not "money".
-  const cleaned = String(t || "")
-    .replace(/^🚨\s*/, "")
-    .replace(/^\[[A-Z]+\]\s*/, "")
+  const cleaned = stripCriticalPrefix(t)
     .replace(/^[^\p{L}\p{N}]+/u, "");
   const firstWord = cleaned.toLowerCase().replace(/[^a-z]+/g, " ").trim().split(" ")[0];
   const map = {
@@ -1159,7 +1157,7 @@ function renderBulletSection(rawTitle, iconName, md, annotations, opts = {}) {
     let body = text;
     const inlineMatch = body.match(CRITICAL_HEADING_RE);
     if (inlineMatch) {
-      const t = inlineMatch.groups?.type ? inlineMatch.groups.type.toLowerCase() : "";
+      const t = inlineMatch[1] ? inlineMatch[1].toLowerCase() : "";
       body = body.replace(CRITICAL_HEADING_RE, "").trim();
       if (t) {
         li.classList.add("critical-fact", `critical-fact--${t}`);
@@ -1226,7 +1224,7 @@ function renderMetaSection(title, name, value) {
   sec.innerHTML = `
     <h2 class="report-section-title">
       ${icon(name)}
-      ${escapeHtml(title)}
+      ${escapeHtml(stripCriticalPrefix(title))}
     </h2>
     <div class="report-section-value">${hl(value.trim())}</div>
   `;
@@ -1301,7 +1299,7 @@ function markCriticalFacts(rootEl) {
     if (!first) return;
     const m = first.nodeValue.match(CRITICAL_HEADING_RE);
     if (m) {
-      const type = m.groups?.type ? m.groups.type.toLowerCase() : "";
+      const type = m[1] ? m[1].toLowerCase() : "";
       first.nodeValue = first.nodeValue.replace(CRITICAL_HEADING_RE, "").trim();
       const section = h2.closest(".report-section");
       if (section) {

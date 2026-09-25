@@ -750,6 +750,7 @@
 .report-body { font-family: var(--font-family-body); }
 .report-body :not(.material-symbols-outlined) { font-family: var(--font-family-body); }
 .report-body .material-symbols-outlined { font-size: 21px; }
+.report-body .report-status .icon-chip .material-symbols-outlined { font-size: 24px; }
 .report-section-value {
   font-size: var(--fs-ml);
   color: var(--main-dark);
