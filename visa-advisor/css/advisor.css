@@ -793,6 +793,15 @@
   margin-left: auto;
 }
 .report-bullet + .report-bullet { margin-top: 0; }
+.report-doc-groups { display: grid; gap: 14px; margin-top: 12px; }
+.report-doc-group {
+  padding: 14px 16px;
+  border: 1px solid var(--border-primary, #E4E5E6);
+  border-radius: 12px;
+  background: var(--background-primary, #FFFFFF);
+}
+.report-doc-group-title { margin: 0 0 8px; font-size: 15px; font-weight: 700; }
+.report-doc-group .report-section-value { margin: 0; }
 .report-bullet::before {
   content: "";
   flex-shrink: 0;
@@ -1757,6 +1766,7 @@
   .field-label,
   .field-label--inner,
   .report-section-title,
+  .report-doc-group-title,
   .form-footnote,
   .report-meta,
   .report-feedback a,
@@ -1768,6 +1778,7 @@
   /* Cards: dark surface instead of white */
   .advisor-form,
   .report-section,
+  .report-doc-group,
   .report-status,
   .report-clarify,
   .report-error { background: #1A1A1A; border-color: #2A2A2A; }

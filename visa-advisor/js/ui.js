@@ -452,9 +452,8 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
   // Caveats should be seen before the booking checklist and any secondary details.
   if (caveats && caveats.trim()) body.appendChild(renderCaveats(caveats));
 
-  // Partial-research warning banner (v0.5) — surfaces when the worker
-  // came up short of the 15-distinct-source minimum even after the
-  // auto-retry. Kept (it's a meaningful signal); the zero-annotation
+  // Source-coverage warning — surfaces when the worker could not find a
+  // recognized official authority even after retry. The zero-annotation
   // "Web research did not return grounded sources" banner was removed
   // per product feedback — it was always-on and noisy.
   if (research?.researchWarning && research.researchWarning.trim()) {
@@ -462,8 +461,9 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
   }
 
   // "Before you book" numbered checklist (critical types drive color)
-  if (crit.length) {
-    body.appendChild(renderBeforeYouBook(crit, sections, ann));
+  const bookingCritical = crit.filter((item) => item.type !== "doc");
+  if (bookingCritical.length) {
+    body.appendChild(renderBeforeYouBook(bookingCritical, sections, ann));
   }
 
   // Passport validity, Fee, Processing time — small grid
@@ -816,16 +816,16 @@ function renderUnverifiedBanner() {
   return document.createDocumentFragment();
 }
 
-/* v0.5 — amber "research was partial" banner. Shown when the worker came
-   up short of the 15-distinct-source minimum even after the auto-retry. */
-function renderResearchWarning(message, sourcesReturned) {
+/* Amber source-coverage warning shown when no recognized official source
+   was found, even after the worker's focused retry. */
+function renderResearchWarning(message) {
   const el = document.createElement("div");
   el.className = "report-research-warning";
   el.setAttribute("role", "alert");
   el.innerHTML = `
     <span class="material-symbols-outlined" aria-hidden="true">info</span>
     <div>
-      <strong>Research was partial.</strong>
+      <strong>Official source not confirmed.</strong>
       ${escapeHtml(message)}
     </div>
   `;
@@ -1115,7 +1115,78 @@ function renderBeforeYouBook(critical, sections, annotations) {
 }
 
 function renderDocsSection(md, rawTitle, annotations, fullMarkdown) {
-  return renderBulletSection(rawTitle || "Required documents (typical)", "docs", md, annotations, { fullMarkdown });
+  const sec = document.createElement("section");
+  sec.className = "report-section report-documents";
+  sec.innerHTML = `<h2 class="report-section-title"><span class="icon-chip icon-chip--neutral" aria-hidden="true"><span class="material-symbols-outlined">article</span></span>${escapeHtml(stripCriticalPrefix(rawTitle || "Required documents (typical)"))}</h2>`;
+
+  const bodyOffset = findSectionOffset(fullMarkdown || "", rawTitle);
+  const localAnns = annotationsForBody(annotations || [], bodyOffset);
+  const bulletMap = attachUrlOnlyAnnotations(buildBulletCharMap(md), localAnns);
+  const groups = parseDocumentGroups(md);
+  groups.forEach((entry) => entry.items.forEach((item) => {
+    item.annotations = bulletMap[item.bulletIndex]?.annotations || [];
+  }));
+
+  const list = document.createElement("div");
+  list.className = "report-doc-groups";
+  for (const entry of groups) {
+    const section = document.createElement("section");
+    section.className = "report-doc-group";
+    const heading = document.createElement("h3");
+    heading.className = "report-doc-group-title";
+    heading.textContent = entry.title;
+    section.appendChild(heading);
+    const items = document.createElement("ul");
+    items.className = "report-section-value report-section-value--list report-bullets";
+    for (const item of entry.items) {
+      const li = document.createElement("li");
+      li.className = "report-bullet";
+      const content = document.createElement("span");
+      content.className = "report-bullet-text";
+      const cleaned = stripEmojis(stripCriticalPrefix(item.text));
+      const html = hl(cleaned);
+      if (html.includes("<mark")) content.innerHTML = html;
+      else content.textContent = cleaned;
+      li.appendChild(content);
+      const cites = dedupeByUrl(item.annotations.map((a) => ({
+        ...a, start: a._localStart ?? a.start, end: a._localEnd ?? a.end,
+      })));
+      if (cites.length) li.appendChild(renderVerifyLinks(cites));
+      items.appendChild(li);
+    }
+    section.appendChild(items);
+    list.appendChild(section);
+  }
+  sec.appendChild(list);
+  return sec;
+}
+
+function parseDocumentGroups(md) {
+  const groups = [];
+  let group = null;
+  let bulletIndex = 0;
+  const lines = (md || "").split("\n");
+  const hasIndentGroups = lines.some((line) => /^\s{2,}[-*•]\s+/.test(line));
+  for (const line of lines) {
+    const match = line.match(/^(\s*)[-*•]\s+(.*)$/);
+    if (!match) continue;
+    const text = match[2].trim();
+    if (!text) continue;
+    const nested = match[1].length >= 2;
+    const isGroup = hasIndentGroups && !nested && !/^(Required|Conditional|Recommended):/i.test(text);
+    if (isGroup) {
+      group = { title: text, items: [] };
+      groups.push(group);
+    } else {
+      if (!group) {
+        group = { title: "Documents", items: [] };
+        groups.push(group);
+      }
+      group.items.push({ text, bulletIndex });
+    }
+    bulletIndex++;
+  }
+  return groups;
 }
 
 function renderBulletSection(rawTitle, iconName, md, annotations, opts = {}) {
@@ -1881,7 +1952,7 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
   const titles  = s.__titles || {};
   const meta    = extractMeta(md);
   const ann     = Array.isArray(annotations) ? annotations : [];
-  const crit    = Array.isArray(critical)    ? critical   : [];
+  const crit    = Array.isArray(critical)    ? critical.filter((item) => item.type !== "doc") : [];
   const searchQs = Array.isArray(research?.searchQueries) ? research.searchQueries : [];
   const sources  = Array.isArray(research?.sources)       ? research.sources       : [];
 
@@ -1956,29 +2027,24 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
     const localAnns = annotationsForBody(ann, bodyOffset);
     const bullets = buildBulletCharMap(s.requiredDocs);
     const mapWithAnn = attachUrlOnlyAnnotations(bullets, localAnns);
-    const items = s.requiredDocs.split("\n")
-      .map(l => l.replace(/^[-•*]\s+/, "").trim())
-      .filter(Boolean)
-      .map((t, i) => {
-        const anns = dedupeByUrl((mapWithAnn[i]?.annotations || []).map(a => ({
-          ...a,
-          start: a._localStart ?? a.start,
-          end:   a._localEnd   ?? a.end,
+    const groupsHtml = parseDocumentGroups(s.requiredDocs).map((group) => {
+      const rows = group.items.map((item) => {
+        const anns = dedupeByUrl((mapWithAnn[item.bulletIndex]?.annotations || []).map(a => ({
+          ...a, start: a._localStart ?? a.start, end: a._localEnd ?? a.end,
         })));
         const links = anns.map(a =>
           ` <a href="${escapeHtmlAttr(a.url)}" style="color:${CLIP.c_accent};text-decoration:underline;font-size:13px;">↗ ${escapeHtmlSafe(a.title || "Verify")}</a>`
         ).join("");
-        return `<li style="display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:15px;line-height:1.45;">
-          <span style="flex-shrink:0;display:inline-block;width:6px;height:6px;border-radius:9999px;background:${CLIP.c_green};margin-top:8px;"></span>
-          <span>${escapeHtmlSafe(t)}${links}</span>
-        </li>`;
+        return `<li style="margin-top:8px;font-size:15px;line-height:1.45;">${escapeHtmlSafe(stripCriticalPrefix(item.text))}${links}</li>`;
       }).join("");
+      return `<div style="margin-top:10px;"><strong>${escapeHtmlSafe(group.title)}</strong><ul style="padding-left:22px;margin:4px 0 0;">${rows}</ul></div>`;
+    }).join("");
     sections.push(
       `<div style="margin-top:16px;padding:20px 24px;background:${CLIP.c_card};` +
       `border:1px solid ${CLIP.c_border};border-radius:16px;">` +
       `<h3 style="margin:0 0 12px;font-size:13px;font-weight:600;color:${CLIP.c_sub};` +
       `text-transform:uppercase;letter-spacing:0.04em;">${escapeHtmlSafe(titles.requiredDocs ? stripCriticalPrefix(titles.requiredDocs) : "Required documents (typical)")}</h3>` +
-      `<ul style="list-style:none;padding:0;margin:0;">${items}</ul>` +
+      `${groupsHtml}` +
       `</div>`
     );
   }
@@ -2127,7 +2193,7 @@ function buildReportText(md, caveats, annotations, critical, research) {
   const titles = s.__titles || {};
   const meta = extractMeta(md);
   const ann  = Array.isArray(annotations) ? annotations : [];
-  const crit = Array.isArray(critical)    ? critical   : [];
+  const crit = Array.isArray(critical)    ? critical.filter((item) => item.type !== "doc") : [];
   const searchQs = Array.isArray(research?.searchQueries) ? research.searchQueries : [];
   const sources  = Array.isArray(research?.sources)       ? research.sources       : [];
   const date = meta.lastVerified || new Date().toISOString().slice(0, 10);
@@ -2147,19 +2213,17 @@ function buildReportText(md, caveats, annotations, critical, research) {
     const localAnns = annotationsForBody(ann, bodyOffset);
     const bullets = buildBulletCharMap(s.requiredDocs);
     const mapWithAnn = attachUrlOnlyAnnotations(bullets, localAnns);
-    const items = s.requiredDocs.split("\n")
-      .map(l => l.replace(/^[-•*]\s+/, "").trim())
-      .filter(Boolean)
-      .map((t, i) => {
-        const anns = dedupeByUrl((mapWithAnn[i]?.annotations || []).map(a => ({
-          ...a,
-          start: a._localStart ?? a.start,
-          end:   a._localEnd   ?? a.end,
+    const groups = parseDocumentGroups(s.requiredDocs).map((group) => {
+      const items = group.items.map((item) => {
+        const anns = dedupeByUrl((mapWithAnn[item.bulletIndex]?.annotations || []).map(a => ({
+          ...a, start: a._localStart ?? a.start, end: a._localEnd ?? a.end,
         })));
-        const links = anns.map(a => `  ↗ ${a.title || a.url} (${a.url})`).join("\n");
-        return `- ${t}${links ? "\n" + links : ""}`;
+        const links = anns.map(a => `    ↗ ${a.title || a.url} (${a.url})`).join("\n");
+        return `  - ${stripCriticalPrefix(item.text)}${links ? "\n" + links : ""}`;
       });
-    if (items.length) out.push("Required documents\n" + items.join("\n"));
+      return `${group.title}\n${items.join("\n")}`;
+    });
+    if (groups.length) out.push("Required documents\n" + groups.join("\n"));
   }
   if (caveats && caveats.trim()) out.push("Caveats\n" + caveats.trim());
   if (crit.length) {

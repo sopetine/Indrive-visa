@@ -22,11 +22,9 @@
    The UI maps these to bullet character ranges and appends a
    "Verify on {source}" link to each.
 
-   v0.5 deep-research enforcement: if the LLM returns < MIN_SOURCES
-   distinct URLs in `sources[]`, the worker auto-retries once with a
-   "do more searches" reminder appended to the user message. If the
-   retry still falls short, the report is returned with a
-   `researchWarning` so the UI shows an amber "partial research" banner.
+   Research quality check: if no recognized official destination or
+   consular authority appears in the source set, the worker retries once
+   with a focused official-source reminder and warns if still absent.
 
    Form payload (from js/api.js):
      { nationality, from, destination, date, purpose, comments, clarify, systemPrompt }
@@ -40,14 +38,6 @@
    ============================================================ */
 
 const ALLOWED_ORIGIN_DEFAULT = "https://sopetine.github.io";
-const MIN_SOURCES = 15;       // floor when no server (Tavily) search ran at all
-const SOFT_MIN_SOURCES = 8;   // floor when server search ran but came up thin
-                               // (e.g. the shared timeout killed most queries) —
-                               // "drop Tier-1 floor" removed the only floor that
-                               // used to apply once Tavily returned anything, so
-                               // a run with just 1-2 sources looked "authoritative"
-                               // with no signal to the user that research was shallow.
-
 export default {
   async fetch(request, env) {
     const origin = env.ALLOWED_ORIGIN || ALLOWED_ORIGIN_DEFAULT;
@@ -173,33 +163,25 @@ export default {
 
     let parsed = parseContract(data, serverSearchSources, tavilyRawResults);
 
-    // Deep-research enforcement (v0.5, softened in v0.8): if the report
-    // came up short of the applicable floor AND web_search is available,
-    // retry once with an explicit "do more searches" reminder appended to
-    // the user message. Cap retries at 1 to bound latency.
-    //
-    // The floor is MIN_SOURCES (15) when no server (Tavily) search ran at
-    // all — the old unaided-LLM bar. When Tavily did run, the bar drops to
-    // SOFT_MIN_SOURCES (8): Tavily-backed sources are more reliable per
-    // source, but a thin Tavily run (e.g. most queries timed out) should
-    // still trigger a retry rather than being treated as "authoritative"
-    // just because serverSearchSources was non-empty.
-    const floor = serverSearchSources.length ? SOFT_MIN_SOURCES : MIN_SOURCES;
+    // Research quality is measured by whether an official authority source
+    // supports the report, not by a padded count of unrelated URLs.
+    let hasOfficialSource = (parsed.sources || []).some((source) =>
+      isOfficialAuthorityDomain(source.domain || extractDomain(source.url))
+    );
     if (
       webSearchAvailable &&
       parsed.type === "report" &&
-      (parsed.sourcesReturned || 0) < floor
+      !hasOfficialSource
     ) {
       const reminder =
-        `\n\nREMINDER (round 2): your previous attempt returned only ` +
-        `${parsed.sourcesReturned || 0} distinct sources. The contract ` +
-        `requires ≥${floor}. You MUST issue additional web searches ` +
-        `covering categories you missed (recent rule changes, transit rules, ` +
-        `reciprocity fees, sanctions pages, IATA matrix, official eVisa ` +
-        `portal). Re-emit the full JSON envelope exactly as specified in the ` +
-        `system prompt — the same field names, the same \`### \` heading ` +
-        `contract for \`markdown\` — with searchQueries[] (now 10–12 entries) ` +
-        `and sources[] (now ≥${floor} entries).`;
+        `\n\nRESEARCH RETRY: the previous report did not include a verified ` +
+        `official destination-government or official consular source. Search ` +
+        `specifically for the destination immigration/visa authority and, if ` +
+        `a consular visa is needed, the official mission serving applicants ` +
+        `in ${from}. Use only relevant sources, attach the official URL to ` +
+        `the claims it supports, and explain if no official source is found. ` +
+        `Do not add unrelated sources to reach a numeric target. Return the ` +
+        `full response contract.`;
       const retryMsg = userMessage + reminder;
       const retryUpstream = await callUpstream(env, requestBody(true, retryMsg));
       if (retryUpstream.ok) {
@@ -212,12 +194,15 @@ export default {
       }
     }
 
-    // Attach a warning if we still came up short after the retry attempt.
-    if (parsed.type === "report" && (parsed.sourcesReturned || 0) < floor) {
+    // Surface missing primary-source coverage instead of treating a large
+    // pile of secondary URLs as proof of adequate research.
+    hasOfficialSource = (parsed.sources || []).some((source) =>
+      isOfficialAuthorityDomain(source.domain || extractDomain(source.url))
+    );
+    if (parsed.type === "report" && !hasOfficialSource) {
       parsed.researchWarning =
-        `Only ${parsed.sourcesReturned || 0} of ${floor} required sources ` +
-        `were retrieved. Verify all claims manually with the destination embassy ` +
-        `before booking travel.`;
+        `No recognized official destination-government or consular source domain was found. ` +
+        `Treat the requirements as unverified and confirm them with the destination authority before booking.`;
     }
 
     return json(parsed, 200, origin);
@@ -280,23 +265,22 @@ function buildSearchQueries(env, nationality, destination, purpose, from) {
   const isSchengen = SCHENGEN_COUNTRIES.has(d.toLowerCase());
 
   const q = [
-    `${n} visa requirements ${d} citizens 2026`,
-    `${d} visa fee processing time official site 2026`,
-    `${d} travel advisory ${n} citizens`,
-    `${d} eVisa ETA official government portal 2026`,
+    `${d} city country official`,
+    `${d} immigration visa requirements ${n} passport official government`,
+    `${d} official visa application documents fee processing time`,
+    `${d} embassy consulate visa applications from ${from}`,
   ];
   if (isRussian) {
-    q.push(`${n} ${d} entry sanctions 2026 visa restrictions`);
-    q.push(`Russian citizens visa processing time delays 2026`);
+    q.push(`${n} passport ${d} entry restrictions visa official`);
   }
   if (/business/i.test(purpose || "")) {
-    q.push(`${d} business visitor visa requirements ${n} 2026`);
+    q.push(`${d} business visitor visa requirements ${n} official`);
   }
   if (isSchengen) {
-    q.push(`Schengen 90 180 rolling window rules visa`);
+    q.push(`${d} Schengen visa official consulate application from ${from}`);
+    q.push(`European Commission Schengen 90 days 180-day period official`);
   }
-  q.push(`IATA travel centre ${d} passport visa`);
-  q.push(`Reciprocity visa fee ${n} ${d}`);
+  q.push(`IATA Travel Centre ${n} passport ${d} entry transit requirements`);
 
   const cap = parseInt((env && env.SEARCH_QUERIES_PER_RUN) || "7", 10) || 7;
   return q.slice(0, cap);
@@ -564,10 +548,18 @@ function dedupeSourcesByUrl(sources) {
    of lower-tier ones. */
 function domainTier(domain) {
   const dom = (domain || "").toLowerCase();
-  if (/\.(gov|gouv|go\.jp)$/.test(dom)) return 0; // authoritative gov
+  if (isOfficialAuthorityDomain(dom)) return 0;
   if (/(wikipedia|iatatravelcentre|passportindex)/.test(dom)) return 1;
   if (/(un\.int|nato\.int|europa\.eu)/.test(dom)) return 2; // multilateral
   return 3;
+}
+
+function isOfficialAuthorityDomain(domain) {
+  const dom = String(domain || "").toLowerCase().replace(/^www\./, "");
+  return /(^|\.)(gov|gouv|go\.jp)(\.[a-z]{2,})?$/.test(dom) ||
+    /(^|\.)gov\.[a-z]{2,}$/.test(dom) ||
+    /(^|\.)(gob|go)\.[a-z]{2,}$/.test(dom) ||
+    ["canada.ca", "govt.nz", "govt.uk", "europa.eu", "mae.ro"].includes(dom);
 }
 
 function extractDomain(url) {

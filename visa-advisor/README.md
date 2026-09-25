@@ -209,7 +209,7 @@ The system prompt instructs the LLM to wrap its answer in a ```json fence (see �
 
 The `markdown` field follows the section order in §2 of the prompt with `🚨 [TYPE]` prefixes on critical sections. The `critical[]` array drives the color-coded "Before you book" numbered checklist at the top of the report. The `annotations[]` array is the ground-truth provenance — each entry is a span-level `url_citation` returned by the API for one grounded claim (the LLM actually visited the URL via the `web_search` tool). The UI maps these annotations to bullet character ranges and appends a "Verify on {source}" hover-tooltip link to each bullet. Empty `annotations[]` triggers an "unverified" banner at the top.
 
-**v0.5 deep-research envelope** — `searchQueries[]`, `sources[]`, `sourcesReturned`, `researchWarning`. Every query must perform **10–12 web searches** yielding **≥15 distinct URLs** in `sources[]`. `searchQueries[]` is the ordered list of queries the LLM actually executed. `sources[]` is the deduped list of URLs it consulted, with `title` + `url` + registrable `domain`. `sourcesReturned` is the distinct-URL count (also enforced by the Worker). If the first attempt returns fewer than 15 sources, the Worker **auto-retries once** with a "do more searches" reminder; if the retry also falls short, the response includes a `researchWarning` string and the UI surfaces an amber partial-research banner.
+**Research envelope** — `searchQueries[]`, `sources[]`, `sourcesReturned`, `researchWarning`. Queries target the traveler, destination, application location, and relevant claim categories. Source quality and coverage matter more than hitting a URL count. The Worker retries once if it cannot recognize an official destination or consular domain; if still absent, it returns a `researchWarning` so the UI flags the missing primary source.
 
 ## Local development
 
@@ -294,5 +294,5 @@ Not in MVP, intentionally:
 
 - **Design language** — derived from the [inDrive.com](https://indrive.com/) styleguide (interior DS).
 - **Countries dataset** — curated subset; full list from [imorte/passport-index-data](https://github.com/imorte/passport-index-data) (MIT).
-- **System prompt** — see [`visa-advisor-prompt.md`](./visa-advisor-prompt.md) (v0.5 — 10–12 web searches per query, ≥15 distinct sources, server-side `web_search` for live research, typed `[MONEY]/[DEADLINE]/[ENTRY]/[DOC]/[STALE]` critical markers, Research log + Sources (N) envelope), sourced from the same spec.
+- **System prompt** — see [`visa-advisor-prompt.md`](./visa-advisor-prompt.md) (route-specific research, official-source priority, grouped document requirements, typed `[MONEY]/[DEADLINE]/[ENTRY]/[DOC]/[STALE]` markers, Research log + Sources envelope).
 - **Disclaimer** — text matches the prompt's `§8f` disclaimer template.
