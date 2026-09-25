@@ -255,7 +255,7 @@ const CRITICAL_TYPE_META = {
  *   "🚨 [MONEY] Fee"
  *   "🚨 Fee"             (v0.3 compat — no type)
  * The [TYPE] group is optional; type is undefined for untyped markers. */
-const CRITICAL_HEADING_RE = /^[\s\u00A0]*🚨(?:\s*\[(MONEY|DEADLINE|ENTRY|DOC|STALE)\])?\s*/i;
+const CRITICAL_HEADING_RE = /^[\s\u00A0]*(?:🚨|[\p{Extended_Pictographic}\p{Regional_Indicator}\uFE0F\u200D]+)(?:\s*\[(?<type>MONEY|DEADLINE|ENTRY|DOC|STALE)\])?\s*/iu;
 
 /* ------------------------------------------------------------
    v0.9 — inline phrase highlighter
@@ -444,6 +444,14 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
     body.appendChild(renderStatus(sections.visaStatus, sections.allowedStay));
   }
 
+  // Keep required documents directly after the visa decision for quick scanning.
+  if (sections.requiredDocs) {
+    body.appendChild(renderDocsSection(sections.requiredDocs, titles.requiredDocs, ann, markdown));
+  }
+
+  // Caveats should be seen before the booking checklist and any secondary details.
+  if (caveats && caveats.trim()) body.appendChild(renderCaveats(caveats));
+
   // Partial-research warning banner (v0.5) — surfaces when the worker
   // came up short of the 15-distinct-source minimum even after the
   // auto-retry. Kept (it's a meaningful signal); the zero-annotation
@@ -456,11 +464,6 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
   // "Before you book" numbered checklist (critical types drive color)
   if (crit.length) {
     body.appendChild(renderBeforeYouBook(crit, sections, ann));
-  }
-
-  // Required documents — bullets get per-source verify links
-  if (sections.requiredDocs) {
-    body.appendChild(renderDocsSection(sections.requiredDocs, titles.requiredDocs, ann, markdown));
   }
 
   // Passport validity, Fee, Processing time — small grid
@@ -545,12 +548,6 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
 
   // Disclaimer (always last)
   body.appendChild(renderDisclaimer(meta.lastVerified));
-
-  // Caveats callout (above disclaimer)
-  if (caveats && caveats.trim()) {
-    const dis = body.querySelector(".report-disclaimer");
-    if (dis) body.insertBefore(renderCaveats(caveats), dis);
-  }
 
   // Post-render: strip 🚨 [TYPE] markers and tag the right CSS classes.
   markCriticalFacts(body);
@@ -684,9 +681,9 @@ function findSectionOffset(markdown, rawTitle) {
 
 /* Strip the 🚨 [TYPE] decoration from a heading for display purposes. */
 function stripCriticalPrefix(title) {
-  return String(title || "")
-    .replace(/^🚨\s*/, "")
-    .replace(/^\[[A-Z]+\]\s*/, "")
+  return stripEmojis(title)
+    .replace(/^\s*🚨\s*/, "")
+    .replace(/^\s*\[(?:MONEY|DEADLINE|ENTRY|DOC|STALE)\]\s*/i, "")
     .trim();
 }
 
@@ -828,7 +825,7 @@ function renderResearchWarning(message, sourcesReturned) {
   el.className = "report-research-warning";
   el.setAttribute("role", "alert");
   el.innerHTML = `
-    <span class="material-symbols-outlined" aria-hidden="true">warning</span>
+    <span class="material-symbols-outlined" aria-hidden="true">info</span>
     <div>
       <strong>Research was partial.</strong>
       ${escapeHtml(message)}
@@ -851,7 +848,7 @@ function renderRawMarkdownFallback(markdown, sourcesCount) {
     : `The advisor's response didn't match the expected report format. Showing the raw response below.`;
   wrap.innerHTML = `
     <div class="report-section-title">
-      <span class="material-symbols-outlined">warning_amber</span>
+      <span class="material-symbols-outlined">info</span>
       Report format unrecognized
     </div>
     <p class="report-section-value">${note}</p>
@@ -1083,22 +1080,21 @@ function renderBeforeYouBook(critical, sections, annotations) {
   wrap.setAttribute("role", "region");
   wrap.setAttribute("aria-labelledby", "before-you-book-title");
 
-  const items = critical.map((c, i) => {
+  const items = critical.map((c) => {
     const type = c.type && CRITICAL_TYPE_META[c.type] ? c.type : "";
     const meta = type ? CRITICAL_TYPE_META[type] : null;
     const icon = meta ? meta.icon : "flag";
     const tone = meta ? meta.tone : "neutral";
-    const label = escapeHtml((c.label || "").trim() || `Step ${i + 1}`);
+    const label = escapeHtml(stripCriticalPrefix((c.label || "").trim()) || "Action to complete");
     const value = escapeHtml((c.value || "").trim());
     const source = (c.source || "").trim();
     const lookupUrl = source && /^https?:\/\//.test(source) ? source : "";
     const verify = lookupUrl
-      ? `<a class="critical-step-verify" href="${escapeAttr(lookupUrl)}" target="_blank" rel="noopener noreferrer" data-snippet="${escapeAttr(`Step ${i + 1}: ${c.label || ""}`)}">Verify</a>`
+      ? `<a class="critical-step-verify" href="${escapeAttr(lookupUrl)}" target="_blank" rel="noopener noreferrer" data-snippet="${escapeAttr(c.label || "")}">Verify</a>`
       : "";
     const cls = type ? `critical-step critical-step--${type}` : "critical-step";
     return `
       <li class="${cls}" data-critical-type="${type}">
-        <span class="critical-step-number" aria-hidden="true">${i + 1}</span>
         <span class="critical-step-icon icon-chip icon-chip--critical-${tone}" aria-hidden="true">
           <span class="material-symbols-outlined">${icon}</span>
         </span>
@@ -1113,10 +1109,9 @@ function renderBeforeYouBook(critical, sections, annotations) {
 
   wrap.innerHTML = `
     <h2 id="before-you-book-title" class="before-you-book-title">
-      <span class="material-symbols-outlined" aria-hidden="true">priority_high</span>
       Before you book
     </h2>
-    <ol class="before-you-book-list">${items}</ol>
+    <ul class="before-you-book-list">${items}</ul>
   `;
   return wrap;
 }
@@ -1135,7 +1130,7 @@ function renderBulletSection(rawTitle, iconName, md, annotations, opts = {}) {
       <span class="icon-chip icon-chip--neutral" aria-hidden="true">
         <span class="material-symbols-outlined">${iconName === "docs" ? "article" : iconName === "rule" ? "rule" : iconName === "campaign" ? "campaign" : "info"}</span>
       </span>
-      ${escapeHtml(rawTitle || "")}
+      ${escapeHtml(stripCriticalPrefix(rawTitle || ""))}
     </h2>
   `;
 
@@ -1164,7 +1159,7 @@ function renderBulletSection(rawTitle, iconName, md, annotations, opts = {}) {
     let body = text;
     const inlineMatch = body.match(CRITICAL_HEADING_RE);
     if (inlineMatch) {
-      const t = inlineMatch[1] ? inlineMatch[1].toLowerCase() : "";
+      const t = inlineMatch.groups?.type ? inlineMatch.groups.type.toLowerCase() : "";
       body = body.replace(CRITICAL_HEADING_RE, "").trim();
       if (t) {
         li.classList.add("critical-fact", `critical-fact--${t}`);
@@ -1174,19 +1169,21 @@ function renderBulletSection(rawTitle, iconName, md, annotations, opts = {}) {
       }
     }
     // Highlight key tokens (Schengen, ETA, $XX USD, 15 days, etc.)
+    body = stripEmojis(body);
     const html = hl(body);
+    const content = document.createElement("span");
+    content.className = "report-bullet-text";
     if (html.includes("<mark")) {
       // Insert as innerHTML (already escaped + wrapped in <mark>). Kept as a
       // single wrapping span — the li is a flex container (for the bullet
       // dot), and unwrapping this into multiple top-level text/mark nodes
       // would turn each of them into its own flex item, breaking text flow
       // into narrow per-word columns.
-      const span = document.createElement("span");
-      span.innerHTML = html;
-      li.appendChild(span);
+      content.innerHTML = html;
     } else {
-      li.appendChild(document.createTextNode(body));
+      content.textContent = body;
     }
+    li.appendChild(content);
 
     // Use localStart/localEnd (already body-local) for matching.
     const anns = dedupeByUrl((mapWithAnn[i]?.annotations || []).map(a => ({
@@ -1194,9 +1191,7 @@ function renderBulletSection(rawTitle, iconName, md, annotations, opts = {}) {
       start: a._localStart ?? a.start,
       end:   a._localEnd   ?? a.end,
     })));
-    if (anns.length) {
-      li.appendChild(renderVerifyLinks(anns));
-    }
+    if (anns.length) li.appendChild(renderVerifyLinks(anns));
     list.appendChild(li);
   });
 
@@ -1214,11 +1209,12 @@ function renderVerifyLinks(annotations) {
     link.href        = a.url;
     link.target      = "_blank";
     link.rel         = "noopener noreferrer";
-    link.dataset.title   = a.title || "Source";
-    link.dataset.snippet = a.snippet || "";
+    link.dataset.title   = stripEmojis(a.title || "Source");
+    link.dataset.snippet = stripEmojis(a.snippet || "");
     link.dataset.verified = a.snippet ? "1" : "0";
     link.setAttribute("aria-describedby", "cite-tooltip-singleton");
-    link.textContent = `Verify on ${a.title || "source"}`;
+    link.setAttribute("aria-label", `Verify on ${stripEmojis(a.title || "source")}`);
+    link.textContent = "Verify";
     wrap.appendChild(link);
   });
   return wrap;
@@ -1258,7 +1254,7 @@ function renderCaveats(text) {
   wrap.className = "report-caveats";
   wrap.setAttribute("role", "note");
   wrap.innerHTML = `
-    <div class="report-caveats-title">${icon("warn", "warn")} Caveats</div>
+    <div class="report-caveats-title">${icon("info", "neutral")} Caveats</div>
     <div class="report-caveats-body">${escapeHtml(text.trim())}</div>
   `;
   return wrap;
@@ -1280,7 +1276,7 @@ const ICONS = {
   shield:   "shield",
   rule:     "rule",
   campaign: "campaign",
-  warn:     "warning_amber",
+  warn:     "info",
   info:     "info",
   external: "arrow_outward",
   refresh:  "refresh",
@@ -1305,21 +1301,13 @@ function markCriticalFacts(rootEl) {
     if (!first) return;
     const m = first.nodeValue.match(CRITICAL_HEADING_RE);
     if (m) {
-      const type = m[1] ? m[1].toLowerCase() : "";
+      const type = m.groups?.type ? m.groups.type.toLowerCase() : "";
       first.nodeValue = first.nodeValue.replace(CRITICAL_HEADING_RE, "").trim();
       const section = h2.closest(".report-section");
       if (section) {
         section.classList.add("is-critical");
         if (type) section.classList.add(`is-critical--${type}`);
         if (type) section.dataset.criticalType = type;
-        // Inject a typed Material Symbols glyph in front of the title text.
-        const glyph = document.createElement("span");
-        glyph.className = "material-symbols-outlined critical-title-glyph" +
-                          (type ? " critical-title-glyph--" + type : " critical-title-glyph--default");
-        glyph.textContent = "priority_high";
-        glyph.setAttribute("aria-hidden", "true");
-        // Insert at the very start of the heading (before the icon-chip).
-        h2.insertBefore(glyph, h2.firstChild);
       }
     }
   });
@@ -1345,12 +1333,15 @@ function firstNonEmptyTextNode(el) {
 
 /* ---- Helpers ---- */
 function escapeHtml(s) {
-  return String(s)
+  return stripEmojis(s)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+function stripEmojis(value) {
+  return String(value || "").replace(/[\p{Extended_Pictographic}\p{Emoji_Modifier}\p{Regional_Indicator}\uFE0F\u200D\u20E3\u{E0020}-\u{E007F}]/gu, "");
 }
 function escapeAttr(s) { return escapeHtml(s); }
 
@@ -1884,7 +1875,7 @@ function escapeHtmlAttr(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 function escapeHtmlSafe(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return stripEmojis(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function buildReportHtml(md, caveats, annotations, critical, research) {
@@ -1942,9 +1933,6 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
       return (
         `<li style="display:flex;align-items:flex-start;gap:12px;padding:10px 0;` +
         `border-top:1px solid ${CLIP.c_border};background:${bg};padding:10px 14px;border-radius:8px;margin-top:6px;">` +
-        `<span style="display:inline-flex;align-items:center;justify-content:center;` +
-        `width:28px;height:28px;border-radius:9999px;background:${CLIP.c_white};` +
-        `color:${fg};font-weight:700;flex-shrink:0;">${i + 1}</span>` +
         `<span style="font-size:16px;line-height:1;color:${fg};flex-shrink:0;margin-top:4px;">${glyph}</span>` +
         `<div style="flex:1;">` +
         `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;` +
@@ -1958,7 +1946,7 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
       `border:1px solid ${CLIP.c_warnBd};border-radius:16px;color:${CLIP.c_warnTxt};">` +
       `<div style="font-weight:700;font-size:13px;letter-spacing:0.04em;text-transform:uppercase;` +
       `margin-bottom:10px;display:flex;align-items:center;gap:8px;">` +
-      `${ms("priority_high", "#6B4900")}<span>BEFORE YOU BOOK</span></div>` +
+      `<span>BEFORE YOU BOOK</span></div>` +
       `<ol style="list-style:none;padding:0;margin:0;">${rows}</ol>` +
       `</div>`
     );
@@ -2041,7 +2029,7 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
       `<div style="margin-top:16px;padding:16px 20px;background:${CLIP.c_warnBg};` +
       `border:1px solid ${CLIP.c_warnBd};border-radius:16px;color:${CLIP.c_warnTxt};">` +
       `<div style="font-weight:700;font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px;">` +
-      `${ms("warning_amber", CLIP.c_warnTxt)}<span>Caveats</span></div>` +
+      `${ms("info", CLIP.c_warnTxt)}<span>Caveats</span></div>` +
       `<div style="font-size:14px;line-height:1.5;white-space:pre-wrap;">${escapeHtmlSafe(caveats.trim())}</div>` +
       `</div>`
     );
@@ -2120,9 +2108,18 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
     `<strong>Not legal advice. Not a substitute for an immigration attorney.</strong></span>` +
     `</div>`;
 
+  const takeSection = (predicate) => {
+    const index = sections.findIndex(predicate);
+    return index < 0 ? "" : sections.splice(index, 1)[0];
+  };
+  const documentsHtml = takeSection((html) => html.includes("Required documents"));
+  const caveatsHtml = takeSection((html) => html.includes("<span>Caveats</span>"));
+  const checklistHtml = takeSection((html) => html.includes("BEFORE YOU BOOK"));
+  const orderedSections = [documentsHtml, caveatsHtml, checklistHtml, ...sections].filter(Boolean);
+
   return (
     `<div style="max-width:680px;margin:0 auto;${CLIP.font};color:${CLIP.c_text};line-height:1.5;">` +
-    statusHtml + sections.join("") + metaHtml + discHtml +
+    statusHtml + orderedSections.join("") + metaHtml + discHtml +
     `</div>`
   );
 }
@@ -2141,22 +2138,11 @@ function buildReportText(md, caveats, annotations, critical, research) {
   // (No zero-annotation banner in the plain-text copy either — the
   //  Disclaimer section below already includes the "always verify"
   //  reminder.)
-  if (crit.length) {
-    const rows = crit.map((c, i) =>
-      `${i + 1}. [${(c.type || "step").toUpperCase()}] ${c.label}: ${c.value}${c.source ? ` — ${c.source}` : ""}`
-    );
-    out.push("BEFORE YOU BOOK\n" + rows.join("\n"));
-  }
-
   const push = (label, value) => {
     const v = (value || "").trim();
     if (v) out.push(label + "\n" + v);
   };
   push("Visa status",        s.visaStatus);
-  push("Allowed stay",       s.allowedStay);
-  push("Passport validity",  s.passportValidity);
-  push("Fee",                s.fee);
-  push("Processing time",    s.processingTime);
 
   if (s.requiredDocs) {
     const bodyOffset = findSectionOffset(md, titles.requiredDocs || "Required documents (typical)");
@@ -2177,6 +2163,19 @@ function buildReportText(md, caveats, annotations, critical, research) {
       });
     if (items.length) out.push("Required documents\n" + items.join("\n"));
   }
+  if (caveats && caveats.trim()) out.push("Caveats\n" + caveats.trim());
+  if (crit.length) {
+    const rows = crit.map((c) =>
+      `[${(c.type || "step").toUpperCase()}] ${c.label}: ${c.value}${c.source ? ` — ${c.source}` : ""}`
+    );
+    out.push("BEFORE YOU BOOK\n" + rows.join("\n"));
+  }
+
+  push("Allowed stay",       s.allowedStay);
+  push("Passport validity",  s.passportValidity);
+  push("Fee",                s.fee);
+  push("Processing time",    s.processingTime);
+
   push("Official application", s.officialUrl);
   push("Exception rules",       s.exceptions);
   push("Travel advisories",     s.advisories);
@@ -2203,8 +2202,6 @@ function buildReportText(md, caveats, annotations, critical, research) {
     const rows = ann.map(a => `- ${a.title || a.url}\n  ${a.url}${a.snippet ? `\n  "${a.snippet}"` : ""}`);
     out.push("Sources (from web research)\n" + rows.join("\n"));
   }
-  if (caveats && caveats.trim()) out.push("Caveats\n" + caveats.trim());
-
   // Meta line with research stats appended (v0.5)
   const statParts = [];
   if (searchQs.length) statParts.push(`${searchQs.length} ${searchQs.length === 1 ? "search" : "searches"}`);
@@ -2216,7 +2213,7 @@ function buildReportText(md, caveats, annotations, critical, research) {
   out.push("---");
   out.push(`This is general information based on publicly available sources as of ${date}. Not legal advice. Not a substitute for an immigration attorney.`);
 
-  return out.join("\n\n");
+  return stripEmojis(out.join("\n\n"));
 }
 
 /* Returns { ok, mode, error? } so callers can render the right flash.

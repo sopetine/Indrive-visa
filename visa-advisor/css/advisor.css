@@ -745,8 +745,11 @@
   letter-spacing: 0.04em;
   margin-bottom: var(--sp-4);
 }
-.report-section-title .icon-chip { width: 24px; height: 24px; }
-.report-section-title .icon-chip .material-symbols-outlined { font-size: 15px; }
+.report-section-title .icon-chip { width: 28px; height: 28px; }
+.report-section-title .icon-chip .material-symbols-outlined { font-size: 21px; }
+.report-body { font-family: var(--font-family-body); }
+.report-body :not(.material-symbols-outlined) { font-family: var(--font-family-body); }
+.report-body .material-symbols-outlined { font-size: 21px; }
 .report-section-value {
   font-size: var(--fs-ml);
   color: var(--main-dark);
@@ -780,6 +783,13 @@
   border-radius: var(--r-2);
   font-size: var(--fs-m);
   line-height: var(--lh-m);
+}
+.report-bullet-text { flex: 1 1 auto; min-width: 0; }
+.report-bullet .verify-links {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  margin-left: auto;
 }
 .report-bullet + .report-bullet { margin-top: 0; }
 .report-bullet::before {
@@ -1412,14 +1422,15 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: 8px;
-  padding: 3px 0;
+  margin-left: 0;
+  padding: 6px 10px;
   font-family: var(--font-family-body);
   font-size: var(--fs-xs);
   font-weight: var(--fw-bold);
   color: var(--main-dark);
-  background: transparent;
-  border: 0;
+  background: var(--soft-beige);
+  border: 1px solid var(--neutral-beige);
+  border-radius: var(--r-pill);
   text-decoration: none;
   white-space: nowrap;
   vertical-align: 2px;
@@ -1536,7 +1547,7 @@
   color: var(--text-and-icon-primary);
 }
 .before-you-book-title .material-symbols-outlined {
-  font-size: 22px;
+  font-size: 24px;
   color: var(--main-dark, #141414);
 }
 .before-you-book-list {
@@ -1550,7 +1561,7 @@
 }
 .critical-step {
   display: grid;
-  grid-template-columns: 28px 32px 1fr auto;
+  grid-template-columns: 40px 1fr auto;
   gap: 12px;
   align-items: center;
   padding: 12px 14px;
@@ -1560,28 +1571,14 @@
   border-radius: var(--r-3);
   box-shadow: none;
 }
-.critical-step-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 9999px;
-  background: #141414;
-  color: #FFFFFF;
-  font-family: var(--font-family-heading);
-  font-weight: var(--fw-bold, 700);
-  font-size: var(--fs-s);
-  flex-shrink: 0;
-}
 .critical-step-icon {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border-radius: var(--r-2, 8px);
   flex-shrink: 0;
 }
 .critical-step-icon .material-symbols-outlined {
-  font-size: 20px;
+  font-size: 24px;
 }
 .critical-step-icon.icon-chip--critical-money,
 .critical-step-icon.icon-chip--critical-deadline,
@@ -1593,7 +1590,7 @@
 }
 
 .critical-step-label {
-  font-size: var(--fs-xxs);
+  font-size: var(--fs-s);
   font-weight: var(--fw-semibold, 600);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1601,8 +1598,7 @@
 }
 .critical-step-value {
   margin-top: 2px;
-  font-family: var(--font-family-heading);
-  font-size: var(--fs-s);
+  font-size: var(--fs-m);
   font-weight: var(--fw-semibold, 600);
   color: var(--main-dark);
   line-height: 1.35;
@@ -1611,12 +1607,14 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 0;
+  min-height: 44px;
+  padding: 0 12px;
   font-size: var(--fs-s);
   font-weight: var(--fw-bold);
   color: var(--main-dark);
-  background: transparent;
-  border: 0;
+  background: var(--soft-beige);
+  border: 1px solid var(--neutral-beige);
+  border-radius: var(--r-pill);
   text-decoration: none;
   white-space: nowrap;
   transition: opacity 120ms ease;
@@ -1667,23 +1665,24 @@
 /* Mobile: critical-step grid collapses */
 @media (max-width: 539px) {
   .critical-step {
-    grid-template-columns: 28px 32px 1fr;
-    grid-template-rows: auto auto;
+    grid-template-columns: 40px minmax(0, 1fr) auto;
     column-gap: 10px;
     row-gap: 8px;
     padding: 12px;
   }
   .critical-step-verify {
-    grid-column: 2 / -1;
-    grid-row: 2;
-    justify-self: start;
-  }
-  .critical-step-body {
     grid-column: 3;
     grid-row: 1;
+    justify-self: end;
   }
-  .critical-step-number { grid-column: 1; grid-row: 1; }
-  .critical-step-icon   { grid-column: 2; grid-row: 1; }
+  .critical-step-body {
+    min-width: 0;
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .critical-step-icon   { grid-column: 1; grid-row: 1; }
+  .report-bullet { flex-wrap: wrap; }
+  .report-bullet .verify-links { width: 100%; }
 }
 
 /* ----- Section-level typed critical accent (driven by heading 🚨 [TYPE] prefix) ----- */
