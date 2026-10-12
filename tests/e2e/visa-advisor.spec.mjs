@@ -26,7 +26,12 @@ test("required route, private comments, distinct trip context, and research warn
   await page.clock.install({ time: new Date("2026-11-10T20:30:00Z") });
   let calls = 0;
   let promptURL;
+  let apiURL;
   const submitted = [];
+  await page.route("**/js/api.js*", async (route) => {
+    apiURL = route.request().url();
+    await route.continue();
+  });
   await page.route("**/visa-advisor-prompt.md*", async (route) => {
     promptURL = route.request().url();
     await route.continue();
@@ -51,6 +56,7 @@ test("required route, private comments, distinct trip context, and research warn
   await expect(page.getByRole("alert")).toContainText("Live web research was unavailable");
   await expect.poll(() => calls).toBe(1);
   expect(submitted[0].comments).toContain("passport detail");
+  expect(new URL(apiURL).searchParams.get("v")).toBe(promptHash);
   expect(new URL(promptURL).searchParams.get("v")).toBe(promptHash);
   expect(submitted[0].systemPrompt).toBeTruthy();
   expect(submitted[0].tripIntent).toBe("entry", "missing intent should retain entry behavior");
