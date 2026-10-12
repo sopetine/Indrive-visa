@@ -9,6 +9,9 @@ const systemPrompt = (await readFile(new URL("../../visa-advisor/visa-advisor-pr
 const promptHash = createHash("sha256").update(systemPrompt).digest("hex");
 const workerSource = await readFile(new URL("../src/index.js", import.meta.url), "utf8");
 const clientSource = await readFile(new URL("../../visa-advisor/js/api.js", import.meta.url), "utf8");
+const uiSource = await readFile(new URL("../../visa-advisor/js/ui.js", import.meta.url), "utf8");
+const mainSource = await readFile(new URL("../../visa-advisor/js/main.js", import.meta.url), "utf8");
+const indexSource = await readFile(new URL("../../visa-advisor/index.html", import.meta.url), "utf8");
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -35,6 +38,9 @@ test("client and Worker use the same versioned advisor prompt", () => {
   assert.ok(workerSource.includes(`const SYSTEM_PROMPT_SHA256 = "${promptHash}"`));
   assert.ok(clientSource.includes(`const SYSTEM_PROMPT_SHA256 = "${promptHash}"`));
   assert.ok(clientSource.includes("cache: \"no-cache\""));
+  assert.ok(uiSource.includes(`./api.js?v=${promptHash}`));
+  assert.ok(mainSource.includes("ui.js?v=20261012-1"));
+  assert.ok(indexSource.includes("main.js?v=20261012-1"));
 });
 
 function reportResponse(sources = []) {

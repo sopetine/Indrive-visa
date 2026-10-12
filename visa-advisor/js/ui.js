@@ -9,7 +9,7 @@
    ============================================================ */
 
 import { findByCode } from "./countries.js";
-import { queryAdvisor } from "./api.js";
+import { queryAdvisor } from "./api.js?v=5fd2244c4334b43507487024191f730ce45faff7150e4b49194ea5e59bcb29fc";
 
 /* ──────────────────────────────────────────────────────────
    DISCLAIMER MODAL
