@@ -17,6 +17,12 @@ import { queryAdvisor } from "./api.js";
 
 const DISCLAIMER_VERSION = "v1"; // bump to re-prompt after content change
 
+function localISODate() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 /* ──────────────────────────────────────────────────────────
    BUTTON RIPPLE — tactile press flourish on any .btn, delegated
    at document level so it also covers buttons rendered later
@@ -44,25 +50,54 @@ export function initModal() {
   const modal   = document.querySelector("[data-modal]");
   const ackBtn  = modal.querySelector("[data-modal-ack]");
   const backdrop= modal.querySelector("[data-modal-backdrop]");
+  const appMain = document.querySelector("main");
 
-  const accepted = localStorage.getItem("visa-advisor.disclaimer") === DISCLAIMER_VERSION;
+  let accepted = false;
+  try { accepted = localStorage.getItem("visa-advisor.disclaimer") === DISCLAIMER_VERSION; }
+  catch { /* storage may be disabled; still show the required disclaimer */ }
 
   function open() {
     modal.hidden = false;
+    if (appMain) appMain.inert = true;
     document.body.style.overflow = "hidden";
     ackBtn.focus();
   }
   function close() {
     modal.hidden = true;
+    if (appMain) appMain.inert = false;
     document.body.style.overflow = "";
   }
   function accept() {
-    localStorage.setItem("visa-advisor.disclaimer", DISCLAIMER_VERSION);
+    try { localStorage.setItem("visa-advisor.disclaimer", DISCLAIMER_VERSION); }
+    catch { /* keep the app usable when storage is disabled */ }
     close();
   }
 
   ackBtn.addEventListener("click", accept);
   backdrop.addEventListener("click", () => { /* require explicit accept */ });
+  modal.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...modal.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+      .filter((element) => !element.hidden);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      modal.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
 
   if (!accepted) open();
   return { open, close };
@@ -79,6 +114,7 @@ export function initForm({ onSubmit }) {
   const fromEl       = form.querySelector("#input-from");
   const destinationEl= form.querySelector("#input-destination");
   const commentsEl   = form.querySelector("#input-comments");
+  const tripIntentEl = form.querySelector("#input-trip-intent");
   const sanctionedUI = form.querySelector("[data-notice=sanctioned]");
   const pillEl       = document.querySelector("[data-view-pill]");
   const pillRouteEl  = document.querySelector("[data-pill-route]");
@@ -175,8 +211,9 @@ export function initForm({ onSubmit }) {
       nationality: readField(nationalityEl),
       from:        readField(fromEl),
       destination: readField(destinationEl),
-      date:        new Date().toISOString().slice(0, 10),
+      date:        localISODate(),
       purpose:     "business",
+      tripIntent:  tripIntentEl.value || "entry",
       comments:    readField(commentsEl),
     };
 
@@ -196,8 +233,9 @@ export function initForm({ onSubmit }) {
         nationality: readField(nationalityEl),
         from:        readField(fromEl),
         destination: readField(destinationEl),
-        date:        new Date().toISOString().slice(0, 10),
+        date:        localISODate(),
         purpose:     "business",
+        tripIntent:  tripIntentEl.value || "entry",
         comments:    readField(commentsEl),
       };
     },
@@ -206,6 +244,7 @@ export function initForm({ onSubmit }) {
       if (data.from)        fromEl.value        = data.from;
       if (data.destination) destinationEl.value = data.destination;
       if (data.comments)    commentsEl.value    = data.comments;
+      tripIntentEl.value = data.tripIntent === "airport-transit" ? "airport-transit" : "entry";
       refreshSubmitState();
     },
   };
@@ -339,9 +378,21 @@ const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 8;
 
 function reportCacheKey(input) {
-  return [input.nationality, input.from, input.destination || ""]
+  const route = [input.nationality, input.from, input.destination || ""]
     .map((s) => String(s || "").trim().toLowerCase())
     .join("|");
+  const context = JSON.stringify([
+    input.date || "",
+    input.purpose || "",
+    input.tripIntent || "entry",
+    input.comments || "",
+    input.clarify || "",
+  ]);
+  let hash = 2166136261;
+  for (let i = 0; i < context.length; i++) {
+    hash = Math.imul(hash ^ context.charCodeAt(i), 16777619);
+  }
+  return `${route}|${(hash >>> 0).toString(36)}`;
 }
 
 export function readReportCache(input) {
@@ -394,6 +445,25 @@ function pruneReportCache() {
 
 function safeParseTs(raw) {
   try { return JSON.parse(raw).ts; } catch { return null; }
+}
+
+function isVerifiedOfficialURL(value, sources) {
+  try {
+    const target = new URL(value);
+    if (target.protocol !== "https:") return false;
+    const host = target.hostname.toLowerCase().replace(/^www\./, "");
+    const official = /(^|\.)gov$/.test(host) ||
+      /(^|\.)gouv\.[a-z]{2}$/.test(host) ||
+      /(^|\.)go\.jp$/.test(host) ||
+      /(^|\.)gov\.[a-z]{2}$/.test(host) ||
+      /(^|\.)(gob|go)\.[a-z]{2}$/.test(host) ||
+      ["canada.ca", "govt.nz", "govt.uk", "europa.eu", "mae.ro"].includes(host);
+    if (!official) return false;
+    return sources.some((source) => {
+      try { return new URL(source.url).hostname.toLowerCase().replace(/^www\./, "") === host; }
+      catch { return false; }
+    });
+  } catch { return false; }
 }
 
 function reportCacheAgeText(envelope) {
@@ -476,7 +546,7 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
 
   // Official URL CTA
   if (sections.officialUrl && /^https?:\/\//.test(sections.officialUrl.trim())) {
-    body.appendChild(renderCta(sections.officialUrl));
+    body.appendChild(renderCta(sections.officialUrl, isVerifiedOfficialURL(sections.officialUrl, sources)));
   } else if (sections.officialUrl) {
     body.appendChild(renderMetaSection(titles.officialUrl || "Official application", "shield", sections.officialUrl));
   }
@@ -701,7 +771,7 @@ function annotationsForBody(annotations, bodyOffset) {
 
 function extractMeta(md) {
   const last = md.match(/### Last verified\s*\n+([\d-]+)/i);
-  return { lastVerified: last ? last[1] : new Date().toISOString().slice(0, 10) };
+  return { lastVerified: last ? last[1] : localISODate() };
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -825,7 +895,7 @@ function renderResearchWarning(message) {
   el.innerHTML = `
     <span class="material-symbols-outlined" aria-hidden="true">info</span>
     <div>
-      <strong>Official source not confirmed.</strong>
+      <strong>${/live web research was unavailable/i.test(message) ? "Live research unavailable." : "Official source not confirmed."}</strong>
       ${escapeHtml(message)}
     </div>
   `;
@@ -1302,16 +1372,18 @@ function renderMetaSection(title, name, value) {
   return sec;
 }
 
-function renderCta(url) {
+function renderCta(url, verifiedOfficial) {
   const sec = document.createElement("section");
   sec.className = "report-section";
+  const heading = verifiedOfficial ? "Official application" : "Application link · verify before sharing details";
+  const action = verifiedOfficial ? "Open official site" : "Open link";
   sec.innerHTML = `
     <h2 class="report-section-title">
       ${icon("shield")}
-      Official application
+      ${escapeHtml(heading)}
     </h2>
     <a class="report-section-value report-section-value--cta" href="${escapeAttr(url.trim())}" target="_blank" rel="noopener noreferrer">
-      Open official site
+      ${escapeHtml(action)}
       ${iconRaw("external")}
     </a>
   `;
@@ -1559,6 +1631,10 @@ export function initReportView({ onEdit }) {
     retryBtn:      document.querySelector("[data-action=retry]"),
     copyBtn:       document.querySelector("[data-action=copy]"),
     shareBtn:      document.querySelector("[data-action=share]"),
+    printBtn:      document.querySelector("[data-action=print]"),
+    printRoute:    document.querySelector("[data-print-route]"),
+    printDate:     document.querySelector("[data-print-date]"),
+    printFallback: document.querySelector("[data-print-fallback]"),
     editBtn:       document.querySelector("[data-action=edit]"),
     stepper:       document.querySelector("[data-stepper]"),
     progress:      document.querySelector("[data-action-bar-progress]"),
@@ -1576,7 +1652,6 @@ export function initReportView({ onEdit }) {
   ];
   let progressTimer = null;
   let progressIdx   = 0;
-  let progressStartedAt = 0;
   let activeQueryKey = "";
   let activeQueryPromise = null;
   let querySequence = 0;
@@ -1606,29 +1681,28 @@ export function initReportView({ onEdit }) {
 
   function showProgress(percent) {
     if (root.progress)     root.progress.hidden = false;
-    if (root.progressFill) root.progressFill.style.width = `${percent}%`;
+    if (root.progressFill) {
+      if (percent >= 100) root.progressFill.classList.remove("is-indeterminate");
+      root.progressFill.style.width = `${percent}%`;
+    }
   }
   function startProgress() {
     if (root.progress)     root.progress.hidden = false;
     setProgress("prompt");
     showProgress(0);
-    progressStartedAt = Date.now();
+    if (root.progressFill) root.progressFill.classList.add("is-indeterminate");
     progressIdx = 0;
     setProgressMessage(PROGRESS_MESSAGES[0]);
     if (progressTimer) clearInterval(progressTimer);
     progressTimer = setInterval(() => {
       progressIdx = (progressIdx + 1) % PROGRESS_MESSAGES.length;
       setProgressMessage(PROGRESS_MESSAGES[progressIdx]);
-      // Advance the bar smoothly up to 95%, leaving room for the final swap.
-      const elapsed = Date.now() - progressStartedAt;
-      const target = Math.min(95, (elapsed / 90_000) * 95);
-      showProgress(target);
     }, 6000);
   }
   function hideProgress() {
     if (progressTimer) { clearInterval(progressTimer); progressTimer = null; }
     if (root.progress)     root.progress.hidden = true;
-    if (root.progressFill) root.progressFill.style.width = "0%";
+    if (root.progressFill) { root.progressFill.classList.remove("is-indeterminate"); root.progressFill.style.width = "0%"; }
     if (root.progressSteps) {
       root.progressSteps.forEach((el) => {
         el.classList.remove("is-active", "is-done");
@@ -1676,6 +1750,16 @@ export function initReportView({ onEdit }) {
       });
     } else copyShareUrl(url);
   });
+  root.printBtn.addEventListener("click", () => {
+    try {
+      if (typeof window.print !== "function") throw new Error("Printing is unavailable");
+      root.printFallback.hidden = true;
+      window.print();
+    } catch {
+      root.printFallback.textContent = "Printing is unavailable here. Use your browser menu and choose Print, or press Ctrl+P (⌘P on Mac). Your report is still available on screen.";
+      root.printFallback.hidden = false;
+    }
+  });
 
   async function copyShareUrl(url) {
     try {
@@ -1703,6 +1787,7 @@ export function initReportView({ onEdit }) {
     if (viewName === "error")    root.error.hidden   = false;
     if (viewName === "clarify")  root.clarify.hidden = false;
     if (viewName === "report")   root.body.hidden    = false;
+    root.printBtn.hidden = viewName !== "report";
   }
 
   function setRoute(fromCode, toCode, destinationCode) {
@@ -1713,6 +1798,7 @@ export function initReportView({ onEdit }) {
     if (destinationCode) {
       root.to.textContent += `  /  ${destinationCode}`;
     }
+    root.printRoute.textContent = `${root.from.textContent} → ${root.to.textContent}`;
   }
 
   function showError(title, body) {
@@ -1728,7 +1814,7 @@ export function initReportView({ onEdit }) {
   }
 
   async function runQuery(input) {
-    const queryKey = [input.nationality, input.from, input.destination, input.comments, input.clarify]
+    const queryKey = [input.nationality, input.from, input.destination, input.date, input.purpose, input.tripIntent || "entry", input.comments, input.clarify]
       .map((value) => String(value || "").trim().toLowerCase()).join("|");
     if (activeQueryKey === queryKey && activeQueryPromise) return activeQueryPromise;
     activeQueryKey = queryKey;
@@ -1743,6 +1829,8 @@ export function initReportView({ onEdit }) {
 
   async function executeQuery(input, sequence) {
     root._lastInput = input;
+    root.printDate.textContent = input.date || "Not available";
+    root.printDate.dateTime = input.date || "";
     show("loading");
     startProgress();
     setTimeout(() => {
@@ -1821,6 +1909,8 @@ export function initReportView({ onEdit }) {
       throw new Error("renderCached: invalid envelope");
     }
     root._lastInput = input;
+    root.printDate.textContent = input.date || "Not available";
+    root.printDate.dateTime = input.date || "";
     root._lastMarkdown    = envelope.markdown;
     root._lastCaveats     = envelope.caveats || "";
     root._lastAnnotations = Array.isArray(envelope.annotations) ? envelope.annotations : [];
@@ -2075,15 +2165,16 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
 
   // Official CTA
   if (s.officialUrl && /^https?:\/\//.test(s.officialUrl.trim())) {
+    const verifiedOfficial = isVerifiedOfficialURL(s.officialUrl, sources);
     sections.push(
       `<div style="margin-top:16px;padding:20px 24px;background:${CLIP.c_card};` +
       `border:1px solid ${CLIP.c_border};border-radius:16px;">` +
       `<h3 style="margin:0 0 12px;font-size:13px;font-weight:600;color:${CLIP.c_sub};` +
-      `text-transform:uppercase;letter-spacing:0.04em;">Official application</h3>` +
+      `text-transform:uppercase;letter-spacing:0.04em;">${verifiedOfficial ? "Official application" : "Application link · verify before sharing details"}</h3>` +
       `<a href="${escapeHtmlAttr(s.officialUrl.trim())}" style="display:flex;align-items:center;justify-content:center;` +
       `gap:8px;min-height:48px;padding:0 24px;background:${CLIP.c_green};color:${CLIP.c_black};` +
       `border:2px solid ${CLIP.c_green};border-radius:12px;font-weight:600;font-size:15px;text-decoration:none;">` +
-      `Open official site ↗</a></div>`
+      `${verifiedOfficial ? "Open official site" : "Open link"} ↗</a></div>`
     );
   }
 
@@ -2154,7 +2245,7 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
   }
 
   // Meta + Disclaimer (v0.5 — research stats appended to the existing line)
-  const date = meta.lastVerified || new Date().toISOString().slice(0, 10);
+  const date = meta.lastVerified || localISODate();
   const statParts = [];
   if (searchQs.length)   statParts.push(`${searchQs.length} ${searchQs.length === 1 ? "search" : "searches"}`);
   if (sources.length)    statParts.push(`${sources.length} ${sources.length === 1 ? "source" : "sources"}`);
@@ -2196,7 +2287,7 @@ function buildReportText(md, caveats, annotations, critical, research) {
   const crit = Array.isArray(critical)    ? critical.filter((item) => item.type !== "doc") : [];
   const searchQs = Array.isArray(research?.searchQueries) ? research.searchQueries : [];
   const sources  = Array.isArray(research?.sources)       ? research.sources       : [];
-  const date = meta.lastVerified || new Date().toISOString().slice(0, 10);
+  const date = meta.lastVerified || localISODate();
   const out  = [];
 
   // (No zero-annotation banner in the plain-text copy either — the
@@ -2238,7 +2329,7 @@ function buildReportText(md, caveats, annotations, critical, research) {
   push("Fee",                s.fee);
   push("Processing time",    s.processingTime);
 
-  push("Official application", s.officialUrl);
+  push(isVerifiedOfficialURL(s.officialUrl, sources) ? "Official application" : "Application link — verify before sharing details", s.officialUrl);
   push("Exception rules",       s.exceptions);
   push("Travel advisories",     s.advisories);
 

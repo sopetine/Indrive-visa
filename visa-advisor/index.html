@@ -20,12 +20,12 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..24,400,0,0&display=swap">
 
   <!-- Project styles (styleguide + visa-advisor additions) -->
-  <link rel="stylesheet" href="css/tokens.css?v=20260925-4">
-  <link rel="stylesheet" href="css/reset.css?v=20260925-4">
-  <link rel="stylesheet" href="css/base.css?v=20260925-4">
-  <link rel="stylesheet" href="css/buttons.css?v=20260925-4">
-  <link rel="stylesheet" href="css/accessibility.css?v=20260925-4">
-  <link rel="stylesheet" href="css/advisor.css?v=20260925-4">
+  <link rel="stylesheet" href="css/tokens.css?v=20261011-2">
+  <link rel="stylesheet" href="css/reset.css?v=20261011-2">
+  <link rel="stylesheet" href="css/base.css?v=20261011-2">
+  <link rel="stylesheet" href="css/buttons.css?v=20261011-2">
+  <link rel="stylesheet" href="css/accessibility.css?v=20261011-2">
+  <link rel="stylesheet" href="css/advisor.css?v=20261011-2">
 </head>
 
 <body class="theme-light">
@@ -127,6 +127,15 @@
             </div>
           </div>
 
+          <div class="field" data-field="trip-intent">
+            <label for="input-trip-intent" class="field-label">Trip intent <span class="field-label--hint">(optional)</span></label>
+            <select id="input-trip-intent" name="tripIntent" class="text-input">
+              <option value="entry">Entering the country</option>
+              <option value="airport-transit">Airport transit (remaining airside)</option>
+            </select>
+            <p class="field-hint">Choose airport transit if you will stay in the international transit area.</p>
+          </div>
+
           <!-- Comments (optional) -->
           <div class="field" data-field="comments">
             <label for="input-comments" class="field-label">
@@ -174,6 +183,7 @@
               <button type="button" class="action-bar-link" data-action="edit">Edit</button>
               <button type="button" class="action-bar-link" data-action="copy">Copy</button>
               <button type="button" class="action-bar-link" data-action="share">Share</button>
+              <button type="button" class="action-bar-link" data-action="print" hidden>Print / Save as PDF</button>
             </div>
           </div>
           <div class="action-bar-progress" data-action-bar-progress hidden aria-hidden="true">
@@ -195,6 +205,12 @@
       <div class="container container--narrow">
 
         <article class="report" data-report aria-live="polite">
+          <header class="print-report-header" data-print-header>
+            <h1>Visa research report</h1>
+            <p><strong>Route:</strong> <span data-print-route></span></p>
+            <p><strong>Checked date:</strong> <time data-print-date></time></p>
+          </header>
+          <p class="print-fallback" data-print-fallback role="status" aria-live="polite" hidden></p>
 
           <!-- Loading state (aria-live only — visual progress is in the action bar) -->
           <div class="report-loading" data-report-loading aria-hidden="true">
@@ -273,7 +289,7 @@
   <div class="sr-only" aria-live="polite" data-announcer></div>
 
   <!-- Scripts (ES modules, no build step) -->
-  <script type="module" src="js/main.js?v=20260925-4"></script>
+  <script type="module" src="js/main.js?v=20261011-2"></script>
 
 </body>
 </html>

@@ -143,7 +143,7 @@ The browser never sees the API key. The Worker holds it in `wrangler` secrets.
 
 | File | Role |
 |---|---|
-| `visa-advisor/visa-advisor-prompt.md` | The full system prompt. **Edit this to change advisor behavior.** Fetched by the browser at runtime and sent to the Worker. |
+| `visa-advisor/visa-advisor-prompt.md` | The approved system prompt. The browser fetches it and sends it to the Worker, which accepts only the prompt version matching its pinned SHA-256 hash. Prompt edits require updating the Worker hash and deploying the Worker with the site. |
 | `visa-advisor/js/api.js` | Sets `API_ENDPOINT`, fetches & caches the prompt, POSTs form values to the Worker, normalizes the response. |
 | `worker/src/index.js` | Edge handler: CORS preflight, validates the request, calls the LLM with `system` + `user` messages, unwraps the §9 JSON fence, returns the contract shape. |
 | `worker/wrangler.toml` | Vars: `LLM_ENDPOINT`, `LLM_MODEL`, `ALLOWED_ORIGIN`. Secret: `LLM_API_KEY`. |
@@ -261,8 +261,8 @@ Push to `main` → GitHub Pages auto-deploys. No build step. Any static host (Ne
 ## Security notes
 
 - **Key:** The LLM API key lives only in the Worker's secrets. It is never bundled into the browser JS, never committed, and never logged.
-- **Public proxy:** Anyone with the Worker URL can spend tokens. For a personal/demo tool this is acceptable; for production, add IP-based rate limiting at the Worker (e.g. via Cloudflare KV).
-- **System prompt trust:** The browser sends the prompt to the Worker; the Worker uses it verbatim. If you want to lock the prompt, pin a SHA-256 hash in `worker/src/index.js` and reject mismatches.
+- **Public proxy:** Anyone with the Worker URL can spend tokens. The Worker applies a Cloudflare per-IP limit of 10 requests per minute per location. This slows single-source bursts but does not set a global spend ceiling.
+- **System prompt trust:** The browser sends the approved prompt to the Worker. The Worker checks it against a pinned SHA-256 hash before calling providers; update the hash and deploy the Worker when the prompt changes.
 - **Output sanitisation:** All LLM output is HTML-escaped before insertion in `js/ui.js → renderReport()`. Markdown links from `### Sources` are matched with a strict regex; no raw HTML is ever injected.
 
 ---
