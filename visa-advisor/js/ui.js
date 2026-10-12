@@ -247,6 +247,17 @@ export function initForm({ onSubmit }) {
       tripIntentEl.value = data.tripIntent === "airport-transit" ? "airport-transit" : "entry";
       refreshSubmitState();
     },
+    clearForm() {
+      nationalityEl.value = "";
+      fromEl.value = "";
+      destinationEl.value = "";
+      commentsEl.value = "";
+      tripIntentEl.value = "entry";
+      clearErrors();
+      if (pillEl) pillEl.hidden = true;
+      if (sanctionedUI) sanctionedUI.hidden = true;
+      refreshSubmitState();
+    },
   };
 }
 
