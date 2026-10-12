@@ -46,6 +46,27 @@ const MAX_FIELD_LENGTHS = { nationality: 120, from: 160, destination: 200, date:
 const UPSTREAM_TIMEOUT_MS = 100_000;
 export default {
   async fetch(request, env) {
+    if (request.headers.get("accept")?.includes("text/event-stream")) {
+      const origin = env.ALLOWED_ORIGIN || ALLOWED_ORIGIN_DEFAULT;
+      const worker = this;
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream({
+        start(controller) {
+          const emit = (event) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          Promise.resolve().then(() => worker.handle(request, env, emit)).then(async (response) => {
+            let payload;
+            try { payload = await response.json(); } catch { payload = { error: "Invalid Worker response" }; }
+            emit({ type: "final", report: payload });
+            controller.close();
+          }).catch(() => { emit({ type: "final", report: { error: "Research request failed" } }); controller.close(); });
+        },
+      });
+      return new Response(stream, { status: 200, headers: { ...corsHeaders(origin), "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform" } });
+    }
+    return this.handle(request, env);
+  },
+
+  async handle(request, env, emitProgress) {
     const origin = env.ALLOWED_ORIGIN || ALLOWED_ORIGIN_DEFAULT;
 
     if (request.method === "OPTIONS") {
@@ -115,8 +136,9 @@ export default {
     let evidenceBlock = "";
     if (env.TAVILY_API_KEY && (env.SEARCH_PROVIDER || "") === "tavily") {
       const queries = buildSearchQueries(env, nationality, destination, purpose, from, tripIntent);
+      for (const query of queries) emitProgress?.({ type: "query", query });
       try {
-        const results = await fetchTavilyResults(env, queries);
+        const results = await fetchTavilyResults(env, queries, 6, (url) => emitProgress?.({ type: "result", url }));
         // Sort authoritative domains (.gov, IATA, Wikipedia, multilateral
         // orgs) first so they fill the evidence char budget before lower-
         // tier results — previously results were sent in raw Tavily
@@ -353,7 +375,7 @@ function buildSearchQueries(env, nationality, destination, purpose, from, tripIn
   return q.slice(0, cap);
 }
 
-async function fetchTavilyResults(env, queries, maxPerQuery = 6) {
+async function fetchTavilyResults(env, queries, maxPerQuery = 6, onResult = () => {}) {
   // Each query gets its own timeout so one slow query can't starve the
   // others — previously a single shared AbortController meant if the
   // whole batch was slow, all queries died together at once.
@@ -373,7 +395,12 @@ async function fetchTavilyResults(env, queries, maxPerQuery = 6) {
           include_answer:     false,
           include_raw_content: false,
         }),
-      }).then((r) => (r.ok ? r.json() : null))
+      }).then((r) => (r.ok ? r.json() : null)).then((data) => {
+        if (Array.isArray(data?.results)) for (const result of data.results) {
+          try { const url = new URL(result.url); if (["http:", "https:"].includes(url.protocol)) onResult(url.href); } catch { /* ignore malformed result */ }
+        }
+        return data;
+      })
         .catch(() => null)
         .finally(() => clearTimeout(timeout));
     })

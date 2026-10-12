@@ -54,7 +54,7 @@ async function loadSystemPrompt() {
  * @returns {Promise<{type:"report", markdown:string, caveats?:string}
  *                 |{type:"clarify", question:string}>}
  */
-export async function queryAdvisor(input) {
+export async function queryAdvisor(input, onProgress) {
   const systemPrompt = await loadSystemPrompt();
 
   const controller = new AbortController();
@@ -63,7 +63,7 @@ export async function queryAdvisor(input) {
   try {
     const res = await fetch(API_ENDPOINT, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(onProgress ? { Accept: "text/event-stream" } : {}) },
       body: JSON.stringify({ ...input, systemPrompt }),
       signal: controller.signal,
     });
@@ -76,7 +76,27 @@ export async function queryAdvisor(input) {
       throw e;
     }
 
-    const data = await res.json();
+    let data;
+    if (res.headers.get("content-type")?.includes("text/event-stream") && res.body?.getReader) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+        const frames = buffer.split("\n\n"); buffer = frames.pop() || "";
+        for (const frame of frames) {
+          const line = frame.split("\n").find((part) => part.startsWith("data: "));
+          if (!line) continue;
+          const event = JSON.parse(line.slice(6));
+          if (event.type === "result" && typeof event.url === "string") {
+            try { const url = new URL(event.url); if (["http:", "https:"].includes(url.protocol)) onProgress?.({ type: "result", url: url.href }); } catch { /* ignore invalid result */ }
+          }
+          if (event.type === "final") data = event.report;
+        }
+        if (done) break;
+      }
+    } else data = await res.json();
     if (!data || (data.type !== "report" && data.type !== "clarify")) {
       const e = new Error("Malformed response from proxy");
       e.code = "MALFORMED";

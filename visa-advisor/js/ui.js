@@ -9,7 +9,7 @@
    ============================================================ */
 
 import { findByCode } from "./countries.js";
-import { queryAdvisor } from "./api.js?v=5fd2244c4334b43507487024191f730ce45faff7150e4b49194ea5e59bcb29fc";
+import { queryAdvisor } from "./api.js?v=5fd2244c4334b43507487024191f730ce45faff7150e4b49194ea5e59bcb29fc-sse1";
 
 /* ──────────────────────────────────────────────────────────
    DISCLAIMER MODAL
@@ -1014,13 +1014,15 @@ function renderSourceChip(s, cited) {
   const safeUrl   = escapeHtmlAttr(s.url);
   const site      = escapeHtml(shortSite(s) || s.url);
   const titleAttr = escapeHtmlAttr(s.url);
+  let hostname = ""; try { hostname = new URL(s.url).hostname; } catch { /* invalid source */ }
+  const favicon = hostname ? `<img class="site-favicon" alt="" width="16" height="16" data-favicon-url="https://${encodeURIComponent(hostname)}/favicon.ico" src="https://${encodeURIComponent(hostname)}/favicon.ico">` : `<span class="site-favicon-fallback" aria-hidden="true">◉</span>`;
   return `<a class="report-source-tag ${cited ? "is-cited" : "is-surveyed"}"
     href="${safeUrl}"
     target="_blank"
     rel="noopener noreferrer"
     title="${titleAttr}"
     data-source-url="${safeUrl}">
-    <span class="reach-dot" data-reach="pending" aria-hidden="true"></span>
+    ${favicon}<span class="reach-dot" data-reach="pending" aria-hidden="true"></span>
     <span class="tag-label">${site}</span>
   </a>`;
 }
@@ -1060,6 +1062,14 @@ function renderSourcesSection(sources, citedUrls) {
     ${clusters.join("")}
     <p class="report-source-reach-summary" data-reach-summary>Reachability: probing 0 / ${sources.length} …</p>
   `;
+  sec.querySelectorAll("img.site-favicon").forEach((img) => img.addEventListener("error", () => {
+    const fallback = document.createElement("span");
+    fallback.className = "site-favicon-fallback";
+    fallback.textContent = "◉";
+    fallback.setAttribute("aria-hidden", "true");
+    fallback.dataset.faviconUrl = img.dataset.faviconUrl;
+    img.replaceWith(fallback);
+  }, { once: true }));
   return sec;
 }
 
@@ -1843,13 +1853,30 @@ export function initReportView({ onEdit }) {
     root.printDate.textContent = input.date || "Not available";
     root.printDate.dateTime = input.date || "";
     show("loading");
+    const liveSites = document.querySelector("[data-researching-sites]");
+    const liveList = document.querySelector("[data-researching-list]");
+    const liveHosts = new Set();
+    if (liveList) liveList.replaceChildren();
+    if (liveSites) liveSites.hidden = false;
     startProgress();
     setTimeout(() => {
       if (sequence === querySequence) setProgress("consult");
     }, 1200);
     try {
-      const data = await queryAdvisor(input);
+      const data = await queryAdvisor(input, (event) => {
+        try {
+          const url = new URL(event.url);
+          if (liveHosts.has(url.hostname)) return;
+          liveHosts.add(url.hostname);
+          const li = document.createElement("li");
+          li.className = "researching-site";
+          li.innerHTML = `<img class="site-favicon" alt="" width="16" height="16" src="https://${encodeURIComponent(url.hostname)}/favicon.ico"><span>${escapeHtml(url.hostname)}</span>`;
+          li.querySelector("img").addEventListener("error", (e) => { e.currentTarget.replaceWith(Object.assign(document.createElement("span"), { className: "site-favicon-fallback", textContent: "◉", ariaHidden: "true" })); }, { once: true });
+          liveList?.append(li);
+        } catch { /* invalid URL */ }
+      });
       if (sequence !== querySequence) return;
+      if (liveSites) liveSites.hidden = true;
       stopProgress();   // helper defined below
       setProgress("compile");
       showProgress(100);

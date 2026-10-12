@@ -56,7 +56,7 @@ test("required route, private comments, distinct trip context, and research warn
   await expect(page.getByRole("alert")).toContainText("Live web research was unavailable");
   await expect.poll(() => calls).toBe(1);
   expect(submitted[0].comments).toContain("passport detail");
-  expect(new URL(apiURL).searchParams.get("v")).toBe(promptHash);
+  expect(new URL(apiURL).searchParams.get("v")).toBe(`${promptHash}-sse1`);
   expect(new URL(promptURL).searchParams.get("v")).toBe(promptHash);
   expect(submitted[0].systemPrompt).toBeTruthy();
   expect(submitted[0].tripIntent).toBe("entry", "missing intent should retain entry behavior");
@@ -68,6 +68,56 @@ test("required route, private comments, distinct trip context, and research warn
   await submit.click();
   await expect.poll(() => calls).toBe(2);
   expect(submitted[1].comments).toContain("no special status");
+});
+
+test("streamed research lists unique result hosts and final source favicons without overflow", async ({ page }, testInfo) => {
+  const streamedReport = { ...report, researchWarning: "", sources: [
+    { title: "Authority", url: "https://example.gov/visa", domain: "example.gov" },
+    { title: "Guide", url: "https://travel.example/guide", domain: "travel.example" },
+  ], sourcesReturned: 2 };
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.evaluate((finalReport) => {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input, options) => {
+      if (String(input).startsWith("https://visa-advisor.sopetine.workers.dev")) {
+        const encoder = new TextEncoder();
+        return Promise.resolve(new Response(new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "query", query: "visa requirements" })}\n\n`));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "result", url: "https://example.gov/visa" })}\n\n`));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "result", url: "https://example.gov/other" })}\n\n`));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "result", url: "https://travel.example/guide" })}\n\n`));
+            setTimeout(() => { controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "final", report: finalReport })}\n\n`)); controller.close(); }, 700);
+          },
+        }), { status: 200, headers: { "content-type": "text/event-stream" } }));
+      }
+      return nativeFetch(input, options);
+    };
+  }, streamedReport);
+  await page.route("**/favicon.ico", (route) => route.abort());
+  await page.getByRole("button", { name: "I understand" }).click();
+  await page.getByLabel(/Passport nationality/).fill("Russian");
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+  const researching = page.locator("[data-researching-sites]");
+  await expect(researching).toBeVisible();
+  await expect(researching.locator("li")).toHaveCount(2);
+  await expect(researching).toContainText("example.gov");
+  await expect(researching).toContainText("travel.example");
+  await expect(researching.locator("li").nth(0)).toContainText("example.gov");
+  await expect(researching.locator("li").nth(1)).toContainText("travel.example");
+  await expect(page.locator(".report-source-tag .site-favicon-fallback")).toHaveCount(2);
+  expect(await page.locator(".report-source-tag .site-favicon-fallback").evaluateAll((icons) => icons.map((icon) => icon.dataset.faviconUrl))).toEqual([
+    "https://example.gov/favicon.ico", "https://travel.example/favicon.ico",
+  ]);
+  await expect(researching).toBeHidden();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`visa-advisor-${width}.png`), fullPage: true });
+  }
 });
 
 test("airport transit is submitted, shareable, and has a separate report cache entry", async ({ page }) => {

@@ -39,8 +39,8 @@ test("client and Worker use the same versioned advisor prompt", () => {
   assert.ok(clientSource.includes(`const SYSTEM_PROMPT_SHA256 = "${promptHash}"`));
   assert.ok(clientSource.includes("cache: \"no-cache\""));
   assert.ok(uiSource.includes(`./api.js?v=${promptHash}`));
-  assert.ok(mainSource.includes("ui.js?v=20261013-1"));
-  assert.ok(indexSource.includes("main.js?v=20261013-1"));
+  assert.ok(mainSource.includes("ui.js?v=20261013-2"));
+  assert.ok(indexSource.includes("main.js?v=20261013-2"));
   assert.match(mainSource, /sessionStorage\.removeItem\("visa-advisor\.last-input"\)/);
   assert.match(mainSource, /formApi\.clearForm\(\)/);
 });
@@ -95,6 +95,40 @@ test("unsupported live-search tooling is clearly marked as unverified", async ()
   assert.equal(response.status, 200);
   assert.equal(calls, 2);
   assert.match(result.researchWarning, /live web research was unavailable/i);
+});
+
+test("streaming clients receive ordered query, result, and final SSE events", async () => {
+  globalThis.fetch = async (url) => String(url).includes("api.tavily.com/search")
+    ? Response.json({ results: [{ title: "Authority", url: "https://example.gov/visa", content: "Visa" }] })
+    : reportResponse();
+  const response = await worker.fetch(request({}, { headers: { "content-type": "application/json", accept: "text/event-stream" } }), {
+    ...env, SEARCH_PROVIDER: "tavily", TAVILY_API_KEY: "search-key", SEARCH_QUERIES_PER_RUN: "1",
+  });
+  assert.match(response.headers.get("content-type"), /text\/event-stream/);
+  const events = (await response.text()).trim().split("\n\n").map((frame) => JSON.parse(frame.slice(6)));
+  assert.equal(events[0].type, "query");
+  assert.equal(events[1].type, "result");
+  assert.equal(events[1].url, "https://example.gov/visa");
+  assert.equal(events.at(-1).type, "final");
+  assert.equal(events.at(-1).report.type, "report");
+});
+
+test("query and result events are readable before the upstream report is ready", async () => {
+  let finishModel;
+  globalThis.fetch = (url) => String(url).includes("api.tavily.com/search")
+    ? Promise.resolve(Response.json({ results: [{ title: "Authority", url: "https://example.gov/visa", content: "Visa" }] }))
+    : new Promise((resolve) => { finishModel = () => resolve(reportResponse()); });
+  const response = await worker.fetch(request({}, { headers: { "content-type": "application/json", accept: "text/event-stream" } }), {
+    ...env, SEARCH_PROVIDER: "tavily", TAVILY_API_KEY: "search-key", SEARCH_QUERIES_PER_RUN: "1",
+  });
+  const reader = response.body.getReader();
+  const decodeEvent = async () => JSON.parse(new TextDecoder().decode((await reader.read()).value).slice(6).trim());
+  assert.equal((await decodeEvent()).type, "query");
+  assert.equal((await decodeEvent()).type, "result");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(typeof finishModel, "function");
+  finishModel();
+  assert.equal((await decodeEvent()).type, "final");
 });
 
 test("transit intent reaches research instructions and triggers transit-specific search", async () => {
