@@ -2,9 +2,9 @@
    MAIN — bootstrap, hash router, view orchestration
    ============================================================ */
 
-import { initModal } from "./ui.js?v=20261012-1";
-import { initForm } from "./ui.js?v=20261012-1";
-import { initReportView, readReportCache } from "./ui.js?v=20261012-1";
+import { initModal } from "./ui.js?v=20261013-1";
+import { initForm } from "./ui.js?v=20261013-1";
+import { initReportView, readReportCache } from "./ui.js?v=20261013-1";
 
 function localISODate() {
   const now = new Date();
@@ -26,6 +26,15 @@ function start() {
     });
     reportApi = initReportView({
       onEdit: () => navigate("/", ""),
+    });
+    document.querySelector(".site-header .logo")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      try {
+        sessionStorage.removeItem("visa-advisor.last-input");
+        localStorage.removeItem("visa-advisor.last-input");
+      } catch {}
+      formApi.clearForm();
+      navigate("/", "");
     });
   } catch (err) {
     console.error("[visa-advisor] init failed:", err);

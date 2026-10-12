@@ -99,6 +99,47 @@ test("airport transit is submitted, shareable, and has a separate report cache e
   expect(keys).not.toEqual(transitCacheKeys);
 });
 
+test("the logo returns home and clears entered and saved form details", async ({ page }) => {
+  await page.route("https://visa-advisor.sopetine.workers.dev/", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(report) })
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: "I understand" }).click();
+  const nationality = page.getByLabel(/Passport nationality/);
+  const basedIn = page.getByLabel(/Based in/);
+  const destination = page.getByLabel(/Destination city/);
+  const comments = page.getByLabel(/Comments/);
+  await nationality.fill("Russian");
+  await basedIn.fill("Georgia");
+  await destination.fill("Paris");
+  await comments.fill("Private travel note");
+  await page.getByLabel(/Trip intent/).selectOption("airport-transit");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+  await expect(page.getByText("Visa-free", { exact: true }).first()).toBeVisible();
+
+  const logo = page.getByRole("link", { name: /Visa Advisor — go to start/ });
+  await logo.click();
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(nationality).toHaveValue("");
+  await expect(basedIn).toHaveValue("");
+  await expect(destination).toHaveValue("");
+  await expect(comments).toHaveValue("");
+  await expect(page.getByLabel(/Trip intent/)).toHaveValue("entry");
+  await expect(page.locator("[data-view-pill]")).toBeHidden();
+  expect(await page.evaluate(() => ({
+    local: localStorage.getItem("visa-advisor.last-input"),
+    session: sessionStorage.getItem("visa-advisor.last-input"),
+  }))).toEqual({ local: null, session: null });
+
+  await nationality.fill("Canadian");
+  await basedIn.fill("Tbilisi");
+  await destination.fill("London");
+  await logo.click();
+  await expect(nationality).toHaveValue("");
+  await expect(basedIn).toHaveValue("");
+  await expect(destination).toHaveValue("");
+});
+
 test("required disclaimer keeps keyboard focus inside until accepted", async ({ page }) => {
   await page.goto("/");
   const ack = page.getByRole("button", { name: "I understand" });

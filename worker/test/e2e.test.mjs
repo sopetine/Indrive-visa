@@ -39,8 +39,10 @@ test("client and Worker use the same versioned advisor prompt", () => {
   assert.ok(clientSource.includes(`const SYSTEM_PROMPT_SHA256 = "${promptHash}"`));
   assert.ok(clientSource.includes("cache: \"no-cache\""));
   assert.ok(uiSource.includes(`./api.js?v=${promptHash}`));
-  assert.ok(mainSource.includes("ui.js?v=20261012-1"));
-  assert.ok(indexSource.includes("main.js?v=20261012-1"));
+  assert.ok(mainSource.includes("ui.js?v=20261013-1"));
+  assert.ok(indexSource.includes("main.js?v=20261013-1"));
+  assert.match(mainSource, /sessionStorage\.removeItem\("visa-advisor\.last-input"\)/);
+  assert.match(mainSource, /formApi\.clearForm\(\)/);
 });
 
 function reportResponse(sources = []) {
