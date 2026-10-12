@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https:;">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#C1F11D">
   <meta name="color-scheme" content="light dark">
@@ -25,7 +26,7 @@
   <link rel="stylesheet" href="css/base.css?v=20261012-1">
   <link rel="stylesheet" href="css/buttons.css?v=20261012-1">
   <link rel="stylesheet" href="css/accessibility.css?v=20261012-1">
-  <link rel="stylesheet" href="css/advisor.css?v=20261012-1">
+  <link rel="stylesheet" href="css/advisor.css?v=20261013-2">
 </head>
 
 <body class="theme-light">
@@ -214,6 +215,9 @@
 
           <!-- Loading state (aria-live only — visual progress is in the action bar) -->
           <div class="report-loading" data-report-loading aria-hidden="true">
+            <section class="researching-sites" data-researching-sites hidden aria-live="polite" aria-label="Researching">
+              <h2>Researching</h2><ul data-researching-list></ul>
+            </section>
             <ol class="stepper" data-stepper aria-label="Generating report">
               <li class="step is-active" data-step="prompt"><span class="step-dot" aria-hidden="true"></span><span class="step-label">Loading advisor knowledge base</span></li>
               <li class="step" data-step="consult"><span class="step-dot" aria-hidden="true"></span><span class="step-label">Consulting Wikipedia, IATA, official sources</span></li>
@@ -289,7 +293,7 @@
   <div class="sr-only" aria-live="polite" data-announcer></div>
 
   <!-- Scripts (ES modules, no build step) -->
-  <script type="module" src="js/main.js?v=20261013-1"></script>
+  <script type="module" src="js/main.js?v=20261013-2"></script>
 
 </body>
 </html>

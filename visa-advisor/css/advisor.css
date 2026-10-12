@@ -1387,6 +1387,12 @@
   text-overflow: ellipsis;
   display: inline-block;
 }
+.site-favicon,.site-favicon-fallback { width:16px; height:16px; flex:0 0 16px; object-fit:contain; display:inline-flex; align-items:center; justify-content:center; }
+.site-favicon-fallback { color:#777; font-size:14px; }
+.researching-sites { margin:16px 0; max-width:100%; overflow-wrap:anywhere; }
+.researching-sites h2 { font-size:1rem; margin:0 0 8px; }
+.researching-sites ul { list-style:none; padding:0; margin:0; display:grid; gap:6px; }
+.researching-site { display:flex; align-items:center; gap:8px; min-height:24px; overflow-wrap:anywhere; }
 .report-source-tag .reach-dot {
   width: 6px;
   height: 6px;

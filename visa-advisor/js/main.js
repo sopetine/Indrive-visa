@@ -2,9 +2,9 @@
    MAIN — bootstrap, hash router, view orchestration
    ============================================================ */
 
-import { initModal } from "./ui.js?v=20261013-1";
-import { initForm } from "./ui.js?v=20261013-1";
-import { initReportView, readReportCache } from "./ui.js?v=20261013-1";
+import { initModal } from "./ui.js?v=20261013-2";
+import { initForm } from "./ui.js?v=20261013-2";
+import { initReportView, readReportCache } from "./ui.js?v=20261013-2";
 
 function localISODate() {
   const now = new Date();
