@@ -558,9 +558,18 @@
   border-radius: inherit;
   transition: width var(--dur-medium) var(--ease);
 }
+.action-bar-progress-fill.is-indeterminate {
+  width: 35% !important;
+  animation: advisor-progress-indeterminate 1.5s ease-in-out infinite alternate;
+}
+@keyframes advisor-progress-indeterminate {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(285%); }
+}
 @media (prefers-reduced-motion: reduce) {
   .action-bar-progress-fill,
   .action-bar-progress-step::before { transition: none; }
+  .action-bar-progress-fill.is-indeterminate { width: 55% !important; animation: none; transform: none; }
 }
 
 /* ---------- Report article ---------- */
@@ -1946,4 +1955,33 @@
 
   .action-bar-progress-live { color: #FFCB66; }
   .action-bar-progress-live::before { background: #FFCB66; }
+}
+/* Print action and paper report */
+.print-report-header { display: none; }
+.print-fallback { margin: 0.75rem auto; max-width: 900px; padding: 0.75rem 1rem; border: 1px solid var(--border-primary); border-radius: var(--r-3); }
+.print-fallback[hidden] { display: none; }
+@media print {
+  @page { margin: 16mm; }
+  html, body { background: #fff !important; color: #111 !important; font-size: 10.5pt; }
+  body * { visibility: hidden !important; }
+  [data-view="report"], [data-view="report"] * { visibility: visible !important; }
+  [data-view="report"] { display: block !important; position: absolute; inset: 0; width: 100%; }
+  [data-view="report"] .action-bar, [data-view="report"] button,
+  [data-view="report"] form, [data-view="report"] [data-print-fallback],
+  [data-view="report"] [data-report-loading], [data-view="report"] [data-report-error],
+  [data-view="report"] [data-report-clarify], [data-view="report"] [data-action-bar-progress] { display: none !important; }
+  [data-view="report"] .print-report-header { display: block !important; margin-bottom: 1.5rem; border-bottom: 1px solid #777; }
+  [data-view="report"] .container--narrow { max-width: none; padding: 0; }
+  [data-view="report"] .report, [data-view="report"] .report-body { width: 100%; max-width: none; margin: 0; padding: 0; }
+  [data-view="report"] .report-section, [data-view="report"] .report-doc-group,
+  [data-view="report"] .report-status, [data-view="report"] .report-caveats,
+  [data-view="report"] .report-critical { color: #111 !important; background: #fff !important; box-shadow: none !important; }
+  [data-view="report"] a { color: #111 !important; text-decoration: underline; overflow-wrap: anywhere; word-break: break-word; }
+  [data-view="report"] a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 0.85em; font-weight: 400; overflow-wrap: anywhere; word-break: break-all; }
+  [data-view="report"] .report-section-value, [data-view="report"] .report-bullet,
+  [data-view="report"] .report-bullet-text, [data-view="report"] li,
+  [data-view="report"] pre { overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; }
+  [data-view="report"] .report-section, [data-view="report"] .report-doc-group,
+  [data-view="report"] .report-critical-item { break-inside: avoid; page-break-inside: avoid; }
+  [data-view="report"] .report-section-title, [data-view="report"] .report-doc-group-title { break-after: avoid; page-break-after: avoid; }
 }

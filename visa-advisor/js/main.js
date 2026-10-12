@@ -2,9 +2,15 @@
    MAIN — bootstrap, hash router, view orchestration
    ============================================================ */
 
-import { initModal } from "./ui.js?v=20260925-4";
-import { initForm } from "./ui.js?v=20260925-4";
-import { initReportView, readReportCache } from "./ui.js?v=20260925-4";
+import { initModal } from "./ui.js?v=20261011-2";
+import { initForm } from "./ui.js?v=20261011-2";
+import { initReportView, readReportCache } from "./ui.js?v=20261011-2";
+
+function localISODate() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
 
 function start() {
   let formApi, reportApi;
@@ -58,6 +64,7 @@ function start() {
       from:        prefill.from || prefill.arr || saved.from || saved.arrival,
       destination: prefill.dst || saved.destination,
       comments:    prefill.comments || saved.comments,
+      tripIntent:  prefill.intent || saved.tripIntent || "entry",
     };
     if (Object.values(values).some(Boolean)) formApi.setFormData(values);
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -78,12 +85,28 @@ function start() {
       nationality: params.nat,
       from:        from,
       destination: params.dst,
-      date:        new Date().toISOString().slice(0, 10),
+      date:        localISODate(),
       purpose:     "business",
+      tripIntent:  params.intent === "airport-transit" ? "airport-transit" : "entry",
     };
+    let savedInput = {};
+    try {
+      savedInput = JSON.parse(sessionStorage.getItem("visa-advisor.last-input")
+        || localStorage.getItem("visa-advisor.last-input") || "{}");
+    } catch {}
+    const sameSavedRoute = [
+      [input.nationality, savedInput.nationality],
+      [input.from, savedInput.from || savedInput.arrival],
+      [input.destination, savedInput.destination],
+    ].every(([current, saved]) =>
+      String(current || "").trim().toLowerCase() === String(saved || "").trim().toLowerCase()
+    );
     if (params.comments) input.comments = params.comments;
+    else if (sameSavedRoute && savedInput.comments) input.comments = savedInput.comments;
+    if (sameSavedRoute && savedInput.date) input.date = savedInput.date;
+    if (sameSavedRoute && savedInput.purpose) input.purpose = savedInput.purpose;
 
-    if (input.nationality && input.from) {
+    if (input.nationality && input.from && input.destination) {
       reportApi.setRoute(input.nationality, input.from, input.destination);
       // v0.9 — try the route-keyed report cache first. If fresh, render
       // it instantly; only fall through to the network when the cache
@@ -99,29 +122,39 @@ function start() {
         }
       }
       reportApi.runQuery(input);
-    } else {
-      const cached = sessionStorage.getItem("visa-advisor.last-input")
-                  || localStorage.getItem("visa-advisor.last-input");
+    } else if (!input.nationality && !input.from && !input.destination) {
+      let cached = null;
+      try {
+        cached = sessionStorage.getItem("visa-advisor.last-input")
+              || localStorage.getItem("visa-advisor.last-input");
+      } catch { /* continue to the form when browser storage is disabled */ }
       if (cached) {
-        const parsed = JSON.parse(cached);
-        // Migration shim for legacy cached shape { arrival } → { from }.
-        if (parsed && !parsed.from && parsed.arrival) parsed.from = parsed.arrival;
-        reportApi.setRoute(parsed.nationality, parsed.from, parsed.destination);
-        // Same cache-first behaviour as above (the pill reuses this path).
-        const cachedReport = readReportCache(parsed);
-        if (cachedReport) {
-          try {
-            reportApi.hideProgress();
-            reportApi.renderCached(parsed, cachedReport);
-            return;
-          } catch (err) {
-            console.warn("[visa-advisor] cached render failed; refetching:", err);
+        try {
+          const parsed = JSON.parse(cached);
+          // Migration shim for legacy cached shape { arrival } → { from }.
+          if (parsed && !parsed.from && parsed.arrival) parsed.from = parsed.arrival;
+          reportApi.setRoute(parsed.nationality, parsed.from, parsed.destination);
+          // Same cache-first behaviour as above (the pill reuses this path).
+          const cachedReport = readReportCache(parsed);
+          if (cachedReport) {
+            try {
+              reportApi.hideProgress();
+              reportApi.renderCached(parsed, cachedReport);
+              return;
+            } catch (err) {
+              console.warn("[visa-advisor] cached render failed; refetching:", err);
+            }
           }
+          reportApi.runQuery(parsed);
+        } catch (err) {
+          console.warn("[visa-advisor] saved input is invalid; showing the form:", err);
+          navigate("/", "");
         }
-        reportApi.runQuery(parsed);
       } else {
         navigate("/", "");
       }
+    } else {
+      navigate("/", "");
     }
     window.scrollTo({ top: 0, behavior: "instant" });
   }
@@ -140,7 +173,7 @@ function start() {
     if (input.nationality) p.set("nat", input.nationality);
     if (input.from)        p.set("from", input.from);
     if (input.destination) p.set("dst", input.destination);
-    if (input.comments)    p.set("comments", input.comments);
+    if (input.tripIntent === "airport-transit") p.set("intent", input.tripIntent);
     return p.toString();
   }
 }

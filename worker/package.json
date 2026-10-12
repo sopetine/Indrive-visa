@@ -1,6 +1,7 @@
 {
   "name": "visa-advisor-worker",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
   "description": "Cloudflare Worker proxy that hides the LLM API key for the Visa Advisor static site.",
   "scripts": {
@@ -9,6 +10,6 @@
     "tail":  "wrangler tail"
   },
   "devDependencies": {
-    "wrangler": "^3.78.0"
+    "wrangler": "^4.36.0"
   }
 }

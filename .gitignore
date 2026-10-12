@@ -9,6 +9,9 @@
 .idea/
 *.swp
 *~
+node_modules/
+playwright-report/
+test-results/
 
 # OS metadata
 Thumbs.db
