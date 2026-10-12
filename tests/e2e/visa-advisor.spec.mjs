@@ -1,4 +1,9 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { test, expect } from "@playwright/test";
+
+const prompt = readFileSync(new URL("../../visa-advisor/visa-advisor-prompt.md", import.meta.url), "utf8").trim();
+const promptHash = createHash("sha256").update(prompt).digest("hex");
 
 const report = {
   type: "report",
@@ -20,7 +25,12 @@ const report = {
 test("required route, private comments, distinct trip context, and research warning work end to end", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-11-10T20:30:00Z") });
   let calls = 0;
+  let promptURL;
   const submitted = [];
+  await page.route("**/visa-advisor-prompt.md*", async (route) => {
+    promptURL = route.request().url();
+    await route.continue();
+  });
   await page.route("https://visa-advisor.sopetine.workers.dev/", async (route) => {
     calls += 1;
     submitted.push(route.request().postDataJSON());
@@ -41,6 +51,8 @@ test("required route, private comments, distinct trip context, and research warn
   await expect(page.getByRole("alert")).toContainText("Live web research was unavailable");
   await expect.poll(() => calls).toBe(1);
   expect(submitted[0].comments).toContain("passport detail");
+  expect(new URL(promptURL).searchParams.get("v")).toBe(promptHash);
+  expect(submitted[0].systemPrompt).toBeTruthy();
   expect(submitted[0].tripIntent).toBe("entry", "missing intent should retain entry behavior");
   expect(submitted[0].date).toBe("2026-11-11", "report date should use the traveler's local calendar day");
   expect(page.url()).not.toContain("passport%20detail");

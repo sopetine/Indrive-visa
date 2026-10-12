@@ -16,7 +16,8 @@
    ============================================================ */
 
 const API_ENDPOINT       = "https://visa-advisor.sopetine.workers.dev";
-const SYSTEM_PROMPT_URL  = "./visa-advisor-prompt.md";
+const SYSTEM_PROMPT_SHA256 = "5fd2244c4334b43507487024191f730ce45faff7150e4b49194ea5e59bcb29fc";
+const SYSTEM_PROMPT_URL  = `./visa-advisor-prompt.md?v=${SYSTEM_PROMPT_SHA256}`;
 const REQUEST_TIMEOUT_MS = 120_000;  // web_search can take 30-90s per query
 
 let _promptCache = null;
@@ -28,7 +29,7 @@ let _promptCache = null;
  */
 async function loadSystemPrompt() {
   if (_promptCache) return _promptCache;
-  const res = await fetch(SYSTEM_PROMPT_URL, { cache: "force-cache" });
+  const res = await fetch(SYSTEM_PROMPT_URL, { cache: "no-cache" });
   if (!res.ok) {
     const e = new Error(`Failed to load system prompt (HTTP ${res.status})`);
     e.code = "PROMPT_LOAD";

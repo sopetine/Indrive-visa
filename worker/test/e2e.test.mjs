@@ -1,10 +1,14 @@
 import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import worker from "../src/index.js";
 
 const originalFetch = globalThis.fetch;
 const systemPrompt = (await readFile(new URL("../../visa-advisor/visa-advisor-prompt.md", import.meta.url), "utf8")).trim();
+const promptHash = createHash("sha256").update(systemPrompt).digest("hex");
+const workerSource = await readFile(new URL("../src/index.js", import.meta.url), "utf8");
+const clientSource = await readFile(new URL("../../visa-advisor/js/api.js", import.meta.url), "utf8");
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -26,6 +30,12 @@ function request(overrides = {}, options = {}) {
     ...options,
   });
 }
+
+test("client and Worker use the same versioned advisor prompt", () => {
+  assert.ok(workerSource.includes(`const SYSTEM_PROMPT_SHA256 = "${promptHash}"`));
+  assert.ok(clientSource.includes(`const SYSTEM_PROMPT_SHA256 = "${promptHash}"`));
+  assert.ok(clientSource.includes("cache: \"no-cache\""));
+});
 
 function reportResponse(sources = []) {
   const fence = String.fromCharCode(96).repeat(3);
