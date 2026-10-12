@@ -227,14 +227,17 @@ test("stalled provider calls time out instead of hanging the Worker", async () =
 test("client cancellation aborts the active provider request", async () => {
   const client = new AbortController();
   let upstreamAborted = false;
+  let upstreamStarted;
+  const started = new Promise((resolve) => { upstreamStarted = resolve; });
   globalThis.fetch = (_url, { signal }) => new Promise((resolve, reject) => {
+    upstreamStarted();
     signal.addEventListener("abort", () => {
       upstreamAborted = true;
       reject(new DOMException("Aborted", "AbortError"));
     }, { once: true });
   });
   const pending = worker.fetch(request({}, { signal: client.signal }), env);
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await started;
   client.abort();
   const response = await pending;
   assert.equal(response.status, 504);
