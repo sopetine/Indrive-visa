@@ -100,9 +100,11 @@ test("airport transit is submitted, shareable, and has a separate report cache e
 });
 
 test("the logo returns home and clears entered and saved form details", async ({ page }) => {
-  await page.route("https://visa-advisor.sopetine.workers.dev/", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(report) })
-  );
+  let workerCalls = 0;
+  await page.route("https://visa-advisor.sopetine.workers.dev/", async (route) => {
+    workerCalls += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(report) });
+  });
   await page.goto("/");
   await page.getByRole("button", { name: "I understand" }).click();
   const nationality = page.getByLabel(/Passport nationality/);
@@ -116,6 +118,9 @@ test("the logo returns home and clears entered and saved form details", async ({
   await page.getByLabel(/Trip intent/).selectOption("airport-transit");
   await page.getByRole("button", { name: /Check requirements/ }).click();
   await expect(page.getByText("Visa-free", { exact: true }).first()).toBeVisible();
+  const cachedReportRoute = page.url();
+  const cachedReportKeys = await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("visa-advisor.report.")));
+  expect(cachedReportKeys.length).toBeGreaterThan(0);
 
   const logo = page.getByRole("link", { name: /Visa Advisor — go to start/ });
   await logo.click();
@@ -126,18 +131,74 @@ test("the logo returns home and clears entered and saved form details", async ({
   await expect(comments).toHaveValue("");
   await expect(page.getByLabel(/Trip intent/)).toHaveValue("entry");
   await expect(page.locator("[data-view-pill]")).toBeHidden();
+  await expect(page.locator(".field-error:visible")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Check requirements/ })).toBeDisabled();
+  expect(await page.evaluate(() => ({
+    local: localStorage.getItem("visa-advisor.last-input"),
+    session: sessionStorage.getItem("visa-advisor.last-input"),
+  }))).toEqual({ local: null, session: null });
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("visa-advisor.report.")))).toEqual(expect.arrayContaining(cachedReportKeys));
+  expect(workerCalls).toBe(1);
+
+  await page.reload();
+  await expect(nationality).toHaveValue("");
+  await expect(basedIn).toHaveValue("");
+  await expect(destination).toHaveValue("");
+  await expect(comments).toHaveValue("");
+  await expect(page.getByLabel(/Trip intent/)).toHaveValue("entry");
+  await expect(page.locator("[data-view-pill]")).toBeHidden();
+  await expect(page.getByRole("button", { name: /Check requirements/ })).toBeDisabled();
   expect(await page.evaluate(() => ({
     local: localStorage.getItem("visa-advisor.last-input"),
     session: sessionStorage.getItem("visa-advisor.last-input"),
   }))).toEqual({ local: null, session: null });
 
-  await nationality.fill("Canadian");
+  await page.goto(cachedReportRoute);
+  await expect(page.getByText("Visa-free", { exact: true }).first()).toBeVisible();
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("visa-advisor.report.")))).toEqual(expect.arrayContaining(cachedReportKeys));
+
+  await page.goto("/#/");
+  await page.evaluate(() => localStorage.setItem("visa-advisor.last-input", JSON.stringify({
+    nationality: "Canadian",
+    from: "Tbilisi",
+    destination: "London",
+    comments: "Saved trip",
+    tripIntent: "airport-transit",
+  })));
+  await page.reload();
+  await expect(page.locator("[data-view-pill]")).toBeVisible();
+  await expect(nationality).toHaveValue("Canadian");
+  await expect(basedIn).toHaveValue("Tbilisi");
+  await expect(destination).toHaveValue("London");
+  await expect(comments).toHaveValue("Saved trip");
+  await expect(page.getByLabel(/Trip intent/)).toHaveValue("airport-transit");
+  await logo.click();
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(page.locator("[data-view-pill]")).toBeHidden();
+  await expect(nationality).toHaveValue("");
+  await expect(basedIn).toHaveValue("");
+  await expect(destination).toHaveValue("");
+  await expect(comments).toHaveValue("");
+  await expect(page.getByLabel(/Trip intent/)).toHaveValue("entry");
+  expect(await page.evaluate(() => ({
+    local: localStorage.getItem("visa-advisor.last-input"),
+    session: sessionStorage.getItem("visa-advisor.last-input"),
+  }))).toEqual({ local: null, session: null });
+  expect(await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("visa-advisor.report.")))).toEqual(expect.arrayContaining(cachedReportKeys));
+
   await basedIn.fill("Tbilisi");
   await destination.fill("London");
+  await page.evaluate(() => document.querySelector("[data-form]").requestSubmit());
+  await expect(page.locator('[data-error-for="nationality"]')).toBeVisible();
   await logo.click();
   await expect(nationality).toHaveValue("");
   await expect(basedIn).toHaveValue("");
   await expect(destination).toHaveValue("");
+  await expect(comments).toHaveValue("");
+  await expect(page.getByLabel(/Trip intent/)).toHaveValue("entry");
+  await expect(page.locator("[data-view-pill]")).toBeHidden();
+  await expect(page.locator(".field-error:visible")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Check requirements/ })).toBeDisabled();
 });
 
 test("required disclaimer keeps keyboard focus inside until accepted", async ({ page }) => {
