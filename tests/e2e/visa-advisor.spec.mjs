@@ -155,6 +155,44 @@ test("airport transit is submitted, shareable, and has a separate report cache e
   expect(keys).not.toEqual(transitCacheKeys);
 });
 
+test("research completion date is stored and restored unchanged, including absence", async ({ page }) => {
+  const datedReport = { ...report, markdown: `${report.markdown}\n\n### Last verified\n2026-10-12` };
+  await page.route("https://visa-advisor.sopetine.workers.dev/", async (route) => {
+    const body = route.request().postDataJSON().destination === "Paris" ? datedReport : report;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "I understand" }).click();
+  await page.getByLabel(/Passport nationality/).fill("Russian");
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+  await expect(page.locator(".report-meta")).toContainText("Last verified: 2026-10-12");
+  const routeWithDate = page.url();
+  const envelope = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((item) => item.startsWith("visa-advisor.report."));
+    return JSON.parse(localStorage.getItem(key));
+  });
+  expect(envelope.completionDate).toBe("2026-10-12");
+  await page.reload();
+  await page.goto(routeWithDate);
+  await expect(page.locator(".report-meta")).toContainText("Last verified: 2026-10-12");
+
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByLabel(/Destination city/).fill("London");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+  await expect(page.locator(".report-meta")).not.toContainText("Last verified:");
+  const absent = await page.evaluate(() => {
+    const entries = Object.keys(localStorage).filter((item) => item.startsWith("visa-advisor.report.")).map((key) => JSON.parse(localStorage.getItem(key)));
+    return entries.find((item) => !item.markdown.includes("### Last verified"));
+  });
+  expect(absent).toHaveProperty("completionDate", null);
+  const absentRoute = page.url();
+  await page.reload();
+  await page.goto(absentRoute);
+  await expect(page.locator(".report-meta")).not.toContainText("Last verified:");
+});
+
 test("the logo returns home and clears entered and saved form details", async ({ page }) => {
   let workerCalls = 0;
   await page.route("https://visa-advisor.sopetine.workers.dev/", async (route) => {

@@ -509,7 +509,7 @@ function reportCacheAgeText(envelope) {
  *                                            sourcesReturned: number,
  *                                            researchWarning: string }
  */
-export function renderReport(body, markdown, annotations, critical, caveats, research) {
+export function renderReport(body, markdown, annotations, critical, caveats, research, completionDate = undefined) {
   body.innerHTML = "";
 
   const sections  = parseSections(markdown);
@@ -519,7 +519,7 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
   const searchQs  = Array.isArray(research?.searchQueries) ? research.searchQueries : [];
   const sources   = Array.isArray(research?.sources)       ? research.sources       : [];
   const checklist = research?.checklist || { status: "unavailable", items: [], message: "No cited research is available to build a verified checklist.", warnings: [] };
-  const meta      = extractMeta(markdown);
+  const meta      = extractMeta(markdown, completionDate);
 
   // Status hero
   if (sections.visaStatus) {
@@ -819,9 +819,9 @@ function annotationsForBody(annotations, bodyOffset) {
     });
 }
 
-function extractMeta(md) {
+function extractMeta(md, completionDate = undefined) {
   const last = md.match(/### Last verified\s*\n+([\d-]+)/i);
-  return { lastVerified: last ? last[1] : localISODate() };
+  return { lastVerified: completionDate === undefined ? (last ? last[1] : null) : completionDate };
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -1466,7 +1466,8 @@ function renderCaveats(text) {
 function renderDisclaimer(date) {
   const wrap = document.createElement("div");
   wrap.className = "report-disclaimer";
-  wrap.innerHTML = `${iconRaw("info")} This is general information based on publicly available sources as of ${escapeHtml(date)}. Visa requirements change frequently and are determined solely by the destination country's authorities. Always verify with the destination embassy or consulate before booking travel. <strong>Not legal advice. Not a substitute for an immigration attorney.</strong>`;
+  const freshness = date ? ` based on publicly available sources as of ${escapeHtml(date)}` : " based on publicly available sources";
+  wrap.innerHTML = `${iconRaw("info")} This is general information${freshness}. Visa requirements change frequently and are determined solely by the destination country's authorities. Always verify with the destination embassy or consulate before booking travel. <strong>Not legal advice. Not a substitute for an immigration attorney.</strong>`;
   return wrap;
 }
 
@@ -1790,6 +1791,7 @@ export function initReportView({ onEdit }) {
       root._lastAnnotations,
       root._lastCritical,
       root._lastResearch,
+      root._lastCompletionDate,
     );
     if (result.ok) {
       const label = result.mode === "rich"   ? "Rich-text report copied"
@@ -1928,6 +1930,7 @@ export function initReportView({ onEdit }) {
         return;
       }
       root._lastMarkdown    = data.markdown;
+      root._lastCompletionDate = extractMeta(data.markdown).lastVerified;
       root._lastCaveats     = data.caveats;
       root._lastAnnotations = data.annotations || [];
       root._lastCritical    = data.critical     || [];
@@ -1942,6 +1945,7 @@ export function initReportView({ onEdit }) {
       // (and a hard refresh) can open this report without a fresh LLM call.
       writeReportCache(input, {
         markdown:    root._lastMarkdown,
+        completionDate: root._lastCompletionDate,
         caveats:     root._lastCaveats,
         annotations: root._lastAnnotations,
         critical:    root._lastCritical,
@@ -1954,6 +1958,7 @@ export function initReportView({ onEdit }) {
         root._lastCritical,
         root._lastCaveats,
         root._lastResearch,
+        root._lastCompletionDate,
       );
 
       // Brief beat so the user sees "Compiling your report" land before swap.
@@ -1992,6 +1997,9 @@ export function initReportView({ onEdit }) {
     root.printDate.textContent = input.date || "Not available";
     root.printDate.dateTime = input.date || "";
     root._lastMarkdown    = envelope.markdown;
+    root._lastCompletionDate = Object.prototype.hasOwnProperty.call(envelope, "completionDate")
+      ? envelope.completionDate
+      : extractMeta(envelope.markdown).lastVerified;
     root._lastCaveats     = envelope.caveats || "";
     root._lastAnnotations = Array.isArray(envelope.annotations) ? envelope.annotations : [];
     root._lastCritical    = Array.isArray(envelope.critical)     ? envelope.critical     : [];
@@ -2009,6 +2017,7 @@ export function initReportView({ onEdit }) {
       root._lastCritical,
       root._lastCaveats,
       root._lastResearch,
+      root._lastCompletionDate,
     );
     show("report");
     announce(`Showing cached report (${reportCacheAgeText(envelope)})`);
@@ -2118,10 +2127,10 @@ function escapeHtmlSafe(s) {
   return stripEmojis(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function buildReportHtml(md, caveats, annotations, critical, research) {
+function buildReportHtml(md, caveats, annotations, critical, research, completionDate = undefined) {
   const s       = parseSections(md);
   const titles  = s.__titles || {};
-  const meta    = extractMeta(md);
+  const meta    = extractMeta(md, completionDate);
   const ann     = Array.isArray(annotations) ? annotations : [];
   const crit    = Array.isArray(critical)    ? critical.filter((item) => item.type !== "doc") : [];
   const searchQs = Array.isArray(research?.searchQueries) ? research.searchQueries : [];
@@ -2334,7 +2343,7 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
   }
 
   // Meta + Disclaimer (v0.5 — research stats appended to the existing line)
-  const date = meta.lastVerified || localISODate();
+  const date = meta.lastVerified;
   const statParts = [];
   if (searchQs.length)   statParts.push(`${searchQs.length} ${searchQs.length === 1 ? "search" : "searches"}`);
   if (sources.length)    statParts.push(`${sources.length} ${sources.length === 1 ? "source" : "sources"}`);
@@ -2342,11 +2351,12 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
   const statsSuffix = statParts.length
     ? ` &nbsp;·&nbsp; Research: ${statParts.join(" · ")}`
     : "";
-  const metaHtml = `<p style="margin-top:16px;font-size:12px;color:${CLIP.c_sub};text-align:center;">Last verified: ${escapeHtmlSafe(date)}${statsSuffix}</p>`;
+  const metaHtml = date ? `<p style="margin-top:16px;font-size:12px;color:${CLIP.c_sub};text-align:center;">Last verified: ${escapeHtmlSafe(date)}${statsSuffix}</p>` : "";
+  const freshness = date ? ` as of ${escapeHtmlSafe(date)}` : "";
   const discHtml =
     `<div style="margin-top:12px;padding:12px 16px;background:${CLIP.c_discBg};border-radius:12px;` +
     `font-size:12px;line-height:1.5;color:${CLIP.c_sub};display:flex;align-items:flex-start;gap:6px;">` +
-    `${ms("info", CLIP.c_sub)}<span>This is general information based on publicly available sources as of ${escapeHtmlSafe(date)}. ` +
+    `${ms("info", CLIP.c_sub)}<span>This is general information based on publicly available sources${freshness}. ` +
     `Visa requirements change frequently and are determined solely by the destination country's authorities. ` +
     `Always verify with the destination embassy or consulate before booking travel. ` +
     `<strong>Not legal advice. Not a substitute for an immigration attorney.</strong></span>` +
@@ -2368,15 +2378,15 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
   );
 }
 
-function buildReportText(md, caveats, annotations, critical, research) {
+function buildReportText(md, caveats, annotations, critical, research, completionDate = undefined) {
   const s      = parseSections(md);
   const titles = s.__titles || {};
-  const meta = extractMeta(md);
+  const meta = extractMeta(md, completionDate);
   const ann  = Array.isArray(annotations) ? annotations : [];
   const crit = Array.isArray(critical)    ? critical.filter((item) => item.type !== "doc") : [];
   const searchQs = Array.isArray(research?.searchQueries) ? research.searchQueries : [];
   const sources  = Array.isArray(research?.sources)       ? research.sources       : [];
-  const date = meta.lastVerified || localISODate();
+  const date = meta.lastVerified;
   const out  = [];
 
   // (No zero-annotation banner in the plain-text copy either — the
@@ -2450,10 +2460,10 @@ function buildReportText(md, caveats, annotations, critical, research) {
   if (sources.length)  statParts.push(`${sources.length} ${sources.length === 1 ? "source" : "sources"}`);
   if (ann.length)      statParts.push(`${ann.length} inline ${ann.length === 1 ? "citation" : "citations"}`);
   const statsSuffix = statParts.length ? `  ·  Research: ${statParts.join(" · ")}` : "";
-  out.push(`Last verified: ${date}${statsSuffix}`);
+  if (date) out.push(`Last verified: ${date}${statsSuffix}`);
 
   out.push("---");
-  out.push(`This is general information based on publicly available sources as of ${date}. Not legal advice. Not a substitute for an immigration attorney.`);
+  out.push(`This is general information based on publicly available sources${date ? ` as of ${date}` : ""}. Not legal advice. Not a substitute for an immigration attorney.`);
 
   return stripEmojis(out.join("\n\n"));
 }
@@ -2462,9 +2472,9 @@ function buildReportText(md, caveats, annotations, critical, research) {
    Tries (1) rich HTML, (2) plain text via the async clipboard API,
    (3) the legacy execCommand fallback for file:// origins and
    older Safari contexts where navigator.clipboard isn't writable. */
-async function copyReport(md, caveats, annotations, critical, research) {
-  const html = buildReportHtml(md, caveats, annotations, critical, research);
-  const text = buildReportText(md, caveats, annotations, critical, research);
+async function copyReport(md, caveats, annotations, critical, research, completionDate = undefined) {
+  const html = buildReportHtml(md, caveats, annotations, critical, research, completionDate);
+  const text = buildReportText(md, caveats, annotations, critical, research, completionDate);
 
   // Path 1 — rich HTML via async Clipboard API.
   if (
