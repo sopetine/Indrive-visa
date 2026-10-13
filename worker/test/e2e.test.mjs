@@ -39,8 +39,8 @@ test("client and Worker use the same versioned advisor prompt", () => {
   assert.ok(clientSource.includes(`const SYSTEM_PROMPT_SHA256 = "${promptHash}"`));
   assert.ok(clientSource.includes("cache: \"no-cache\""));
   assert.ok(uiSource.includes(`./api.js?v=${promptHash}`));
-  assert.ok(mainSource.includes("ui.js?v=20261013-2"));
-  assert.ok(indexSource.includes("main.js?v=20261013-2"));
+  assert.ok(mainSource.includes("ui.js?v=20261013-3"));
+  assert.ok(indexSource.includes("main.js?v=20261013-3"));
   assert.match(mainSource, /sessionStorage\.removeItem\("visa-advisor\.last-input"\)/);
   assert.match(mainSource, /formApi\.clearForm\(\)/);
 });
@@ -95,6 +95,29 @@ test("unsupported live-search tooling is clearly marked as unverified", async ()
   assert.equal(response.status, 200);
   assert.equal(calls, 2);
   assert.match(result.researchWarning, /live web research was unavailable/i);
+  assert.equal(result.checklist.status, "unavailable");
+  assert.match(result.checklist.message, /No checklist items could be verified/i);
+});
+
+test("checklist includes only citation-backed documents and preserves source warnings", async () => {
+  let calls = 0;
+  const body = "```json\n" + JSON.stringify({ markdown: "### Visa status\nVisa-free\n\n### Required documents\n- Required: Valid passport\n- Required: Uncited invitation letter", sources: [{ title: "Authority", url: "https://travel.example.org/visa", domain: "travel.example.org" }] }) + "\n```";
+  const start = body.indexOf("Required: Valid passport");
+  globalThis.fetch = async () => {
+    calls += 1;
+    return Response.json({
+      output: [{ type: "message", content: [{ type: "output_text",
+        text: body,
+        annotations: [{ type: "url_citation", title: "Travel authority", url: "https://travel.example.org/passport", start_index: start, end_index: start + "Required: Valid passport".length }],
+      }] }],
+    });
+  };
+  const result = await (await worker.fetch(request(), env)).json();
+  assert.equal(result.checklist.items[0].status, "supported");
+  assert.equal(result.checklist.items[0].sources[0].url, "https://travel.example.org/passport");
+  assert.equal(result.checklist.items[1].status, "unknown");
+  assert.equal(result.checklist.status, "available");
+  assert.match(result.checklist.items[0].warnings.join(" "), /No recognized official/i);
 });
 
 test("streaming clients receive ordered query, result, and final SSE events", async () => {

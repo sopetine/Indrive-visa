@@ -518,6 +518,7 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
   const crit      = Array.isArray(critical)     ? critical   : [];
   const searchQs  = Array.isArray(research?.searchQueries) ? research.searchQueries : [];
   const sources   = Array.isArray(research?.sources)       ? research.sources       : [];
+  const checklist = research?.checklist || { status: "unavailable", items: [], message: "No cited research is available to build a verified checklist.", warnings: [] };
   const meta      = extractMeta(markdown);
 
   // Status hero
@@ -527,8 +528,10 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
 
   // Keep required documents directly after the visa decision for quick scanning.
   if (sections.requiredDocs) {
-    body.appendChild(renderDocsSection(sections.requiredDocs, titles.requiredDocs, ann, markdown));
+    body.appendChild(renderDocsSection(sections.requiredDocs, titles.requiredDocs, ann, markdown, checklist));
   }
+
+  body.appendChild(renderEvidenceChecklist(checklist));
 
   // Caveats should be seen before the booking checklist and any secondary details.
   if (caveats && caveats.trim()) body.appendChild(renderCaveats(caveats));
@@ -635,6 +638,42 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
 
   // Activate the shared tooltip singleton (idempotent — safe to call repeatedly).
   ensureTooltip();
+}
+
+function renderEvidenceChecklist(checklist) {
+  const section = document.createElement("section");
+  section.className = "report-section evidence-checklist";
+  section.setAttribute("aria-labelledby", "evidence-checklist-title");
+  const items = Array.isArray(checklist?.items) ? checklist.items : [];
+  section.innerHTML = `<h2 id="evidence-checklist-title" class="report-section-title">Verified documents and next steps</h2>`;
+  if (checklist?.status !== "available" || !items.some((item) => item.status === "supported")) {
+    const message = checklist?.message || "No cited research is available to build a verified checklist.";
+    section.insertAdjacentHTML("beforeend", `<p class="checklist-unavailable">${escapeHtml(message)}</p>`);
+  }
+  const list = document.createElement("ul");
+  list.className = "evidence-checklist-list";
+  for (const item of items) {
+    const li = document.createElement("li");
+    li.className = "evidence-checklist-item";
+    const category = item.category === "document" ? "Document" : "Next step";
+    li.innerHTML = `<span class="checklist-state">${item.status === "supported" ? "Supported" : "Unknown requirement"}</span> <strong>${category}:</strong> <span class="checklist-text">${escapeHtml(item.text || "")}</span>`;
+    for (const source of Array.isArray(item.sources) ? item.sources : []) {
+      if (!/^https?:\/\//i.test(source.url || "")) continue;
+      const link = document.createElement("a");
+      link.href = source.url; link.target = "_blank"; link.rel = "noopener noreferrer";
+      link.textContent = `Source: ${source.title || source.url}`;
+      li.appendChild(link);
+    }
+    for (const warning of Array.isArray(item.warnings) ? item.warnings : []) {
+      const note = document.createElement("p"); note.className = "checklist-warning"; note.textContent = warning; li.appendChild(note);
+    }
+    list.appendChild(li);
+  }
+  section.appendChild(list);
+  for (const warning of Array.isArray(checklist?.warnings) ? checklist.warnings : []) {
+    const note = document.createElement("p"); note.className = "checklist-warning"; note.textContent = warning; section.appendChild(note);
+  }
+  return section;
 }
 
 /* ---- Section parser ---- */
@@ -1205,7 +1244,7 @@ function renderBeforeYouBook(critical, sections, annotations) {
   return wrap;
 }
 
-function renderDocsSection(md, rawTitle, annotations, fullMarkdown) {
+function renderDocsSection(md, rawTitle, annotations, fullMarkdown, checklist = null) {
   const sec = document.createElement("section");
   sec.className = "report-section report-documents";
   sec.innerHTML = `<h2 class="report-section-title"><span class="icon-chip icon-chip--neutral" aria-hidden="true"><span class="material-symbols-outlined">article</span></span>${escapeHtml(stripCriticalPrefix(rawTitle || "Required documents (typical)"))}</h2>`;
@@ -1235,9 +1274,11 @@ function renderDocsSection(md, rawTitle, annotations, fullMarkdown) {
       const content = document.createElement("span");
       content.className = "report-bullet-text";
       const cleaned = stripEmojis(stripCriticalPrefix(item.text));
-      const html = hl(cleaned);
+      const status = checklist?.items?.find((entry) => entry.category === "document" && entry.text.trim() === item.text.trim())?.status;
+      const displayText = status === "unknown" ? `Unknown requirement: ${cleaned}` : cleaned;
+      const html = hl(displayText);
       if (html.includes("<mark")) content.innerHTML = html;
-      else content.textContent = cleaned;
+      else content.textContent = displayText;
       li.appendChild(content);
       const cites = dedupeByUrl(item.annotations.map((a) => ({
         ...a, start: a._localStart ?? a.start, end: a._localEnd ?? a.end,
@@ -1895,6 +1936,7 @@ export function initReportView({ onEdit }) {
         sources:       Array.isArray(data.sources)       ? data.sources       : [],
         sourcesReturned: Number.isFinite(data.sourcesReturned) ? data.sourcesReturned : 0,
         researchWarning: typeof data.researchWarning === "string" ? data.researchWarning : "",
+        checklist: data.checklist || null,
       };
       // Persist to route-keyed cache so the Back-to-last-report pill
       // (and a hard refresh) can open this report without a fresh LLM call.
@@ -1958,6 +2000,7 @@ export function initReportView({ onEdit }) {
       sources:          Array.isArray(envelope.sources)       ? envelope.sources       : [],
       sourcesReturned:  Number.isFinite(envelope.sourcesReturned) ? envelope.sourcesReturned : 0,
       researchWarning:  typeof envelope.researchWarning === "string" ? envelope.researchWarning : "",
+      checklist: envelope.checklist || null,
     };
     renderReport(
       root.body,
@@ -2083,6 +2126,7 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
   const crit    = Array.isArray(critical)    ? critical.filter((item) => item.type !== "doc") : [];
   const searchQs = Array.isArray(research?.searchQueries) ? research.searchQueries : [];
   const sources  = Array.isArray(research?.sources)       ? research.sources       : [];
+  const checklist = research?.checklist || { status: "unavailable", items: [], message: "No cited research is available to build a verified checklist.", warnings: [] };
 
   // Status hero (compact for email).
   const normSt  = (s.visaStatus || "").trim().toLowerCase();
@@ -2105,6 +2149,13 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
     `</div>`;
 
   const sections = [];
+
+  const checklistRows = checklist.items.map((item) => {
+    const links = (item.sources || []).filter((source) => /^https?:\/\//i.test(source.url || "")).map((source) => `<a href="${escapeHtmlAttr(source.url)}">${escapeHtmlSafe(source.title || source.url)}</a>`).join(" · ");
+    const warnings = (item.warnings || []).map((warning) => `<p>${escapeHtmlSafe(warning)}</p>`).join("");
+    return `<li><strong>${item.status === "supported" ? "Supported" : "Unknown requirement"} · ${item.category === "document" ? "Document" : "Next step"}:</strong> ${escapeHtmlSafe(item.text)} ${links}${warnings}</li>`;
+  }).join("");
+  sections.push(`<section class="print-evidence-checklist"><h3>Verified documents and next steps</h3>${checklist.status === "available" ? "" : `<p>${escapeHtmlSafe(checklist.message || "No cited research is available to build a verified checklist.")}</p>`}<ul>${checklistRows}</ul>${(checklist.warnings || []).map((warning) => `<p>${escapeHtmlSafe(warning)}</p>`).join("")}</section>`);
 
   // (Zero-annotation "Web research did not return grounded sources" banner
   //  was removed in v0.9 — the Disclaimer already says verify with the

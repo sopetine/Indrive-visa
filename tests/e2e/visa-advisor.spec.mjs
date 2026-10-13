@@ -20,6 +20,12 @@ const report = {
   sources: [{ title: "Immigration office", url: "https://example.gov/apply", domain: "example.gov" }],
   sourcesReturned: 1,
   researchWarning: "Live web research was unavailable; this result is not confirmed.",
+  checklist: {
+    status: "available",
+    message: "",
+    warnings: ["Live web research was unavailable; verify with the authority."],
+    items: [{ category: "document", text: "Valid passport", status: "supported", sources: [{ title: "Immigration office", url: "https://example.gov/apply" }], warnings: ["Live web research was unavailable; verify with the authority."] }],
+  },
 };
 
 test("required route, private comments, distinct trip context, and research warning work end to end", async ({ page }) => {
@@ -361,7 +367,7 @@ test("corrupted saved form data falls back to the form", async ({ page }) => {
   await expect(page.getByLabel(/Passport nationality/)).toBeVisible();
 });
 
-test("successful report has accessible print action and privacy-safe printable content", async ({ page }) => {
+test("successful report has accessible print action and privacy-safe printable content", async ({ page }, testInfo) => {
   await page.clock.install({ time: new Date("2026-11-10T20:30:00Z") });
   await page.addInitScript(() => { window.printCalls = 0; window.print = () => { window.printCalls += 1; }; });
   await page.route("https://visa-advisor.sopetine.workers.dev/", (route) =>
@@ -384,6 +390,13 @@ test("successful report has accessible print action and privacy-safe printable c
   await expect.poll(() => page.evaluate(() => window.printCalls)).toBe(1);
   await page.emulateMedia({ media: "print" });
   await expect(page.locator("[data-print-header]")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Verified documents and next steps" })).toBeVisible();
+  await expect(page.locator(".evidence-checklist")).toContainText("Supported");
+  await expect(page.locator(".evidence-checklist")).toContainText("Live web research was unavailable");
+  await page.emulateMedia({ media: "screen" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: testInfo.outputPath("checklist-desktop.png"), fullPage: true });
+  await page.emulateMedia({ media: "print" });
   await expect(page.getByRole("heading", { name: "Required documents" })).toBeVisible();
   await expect(page.getByRole("alert")).toContainText("Live web research was unavailable");
   await expect(page.locator('[data-view="report"] a[href="https://example.gov/apply"]').first()).toHaveAttribute("href", "https://example.gov/apply");
@@ -396,7 +409,7 @@ test("successful report has accessible print action and privacy-safe printable c
   expect(printStyles).toBe("none");
 });
 
-test("print fallback preserves report and narrow layout has no horizontal overflow", async ({ page }) => {
+test("print fallback preserves report and narrow layout has no horizontal overflow", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.addInitScript(() => { window.print = () => { throw new Error("blocked"); }; });
   await page.route("https://visa-advisor.sopetine.workers.dev/", (route) =>
@@ -411,6 +424,24 @@ test("print fallback preserves report and narrow layout has no horizontal overfl
   await page.getByRole("button", { name: "Print / Save as PDF" }).click();
   await expect(page.locator("[data-print-fallback]")).toContainText("Use your browser menu");
   await expect(page.getByText("Visa-free", { exact: true }).first()).toBeVisible();
+  await expect(page.locator(".evidence-checklist a")).toHaveAttribute("href", "https://example.gov/apply");
+  await page.screenshot({ path: testInfo.outputPath("checklist-mobile.png"), fullPage: true });
   const dimensions = await page.locator("body").evaluate((el) => ({ body: el.scrollWidth, viewport: innerWidth }));
   expect(dimensions.body).toBeLessThanOrEqual(dimensions.viewport);
+});
+
+test("report with no checklist evidence shows an honest unavailable state", async ({ page }) => {
+  await page.route("https://visa-advisor.sopetine.workers.dev/", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ ...report, checklist: { status: "unavailable", items: [], message: "No checklist items could be verified against cited research.", warnings: [] }, sources: [], sourcesReturned: 0 }),
+  }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "I understand" }).click();
+  await page.getByLabel(/Passport nationality/).fill("Canadian");
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+  await expect(page.locator(".evidence-checklist")).toContainText("No checklist items could be verified");
+  await expect(page.locator(".evidence-checklist-item")).toHaveCount(0);
 });
