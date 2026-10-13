@@ -1581,6 +1581,21 @@
   font-size: var(--fs-s);
   font-weight: var(--fw-semibold, 600);
 }
+.before-you-book-reset {
+  margin: 0 0 12px;
+  padding: 7px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--r-2, 8px);
+  background: var(--main-white);
+  color: var(--text-and-icon-primary);
+  font: inherit;
+  font-weight: var(--fw-semibold, 600);
+  cursor: pointer;
+}
+.before-you-book-reset:focus-visible {
+  outline: 3px solid var(--main-green);
+  outline-offset: 3px;
+}
 .before-you-book-list {
   list-style: none;
   margin: 0;

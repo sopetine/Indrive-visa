@@ -1283,9 +1283,16 @@ function renderBeforeYouBook(critical, sections, annotations, flags = [], report
       Before you book
     </h2>
     <p class="before-you-book-progress" aria-live="polite" aria-atomic="true">${flags.filter(Boolean).length} of ${critical.length} complete</p>
+    <button class="before-you-book-reset" type="button">Reset progress</button>
     <ul class="before-you-book-list">${items}</ul>
   `;
   const progress = wrap.querySelector(".before-you-book-progress");
+  const checkboxes = [...wrap.querySelectorAll(".critical-step-checkbox")];
+  wrap.querySelector(".before-you-book-reset").addEventListener("click", () => {
+    checkboxes.forEach((checkbox) => { checkbox.checked = false; });
+    progress.textContent = `0 of ${critical.length} complete`;
+    if (reportId) writeChecklistFlags(reportId, checkboxes.map(() => false));
+  });
   wrap.addEventListener("change", (event) => {
     if (!event.target.matches(".critical-step-checkbox")) return;
     const completed = wrap.querySelectorAll(".critical-step-checkbox:checked").length;
