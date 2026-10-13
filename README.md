@@ -4,7 +4,7 @@ This repository has one source branch: `main`.
 
 ## What lives here
 
-- `visa-advisor/` — the website shown at [sopetine.github.io/Indrive-visa](https://sopetine.github.io/Indrive-visa/).
+- `visa-advisor/` — the Visa Advisor website.
 - `worker/` — the private-key proxy and research service used by the website.
 - `scripts/deploy.sh` — deploys the Worker to Cloudflare after Cloudflare access is configured.
 

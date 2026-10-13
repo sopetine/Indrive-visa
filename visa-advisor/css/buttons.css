@@ -1,7 +1,4 @@
-/* ============================================================
-   BUTTONS — mirrors inDrive .s2c4k1w + .bbs4ndg recipe
-   Two-layer: base chrome (.btn) + variant modifier (.btn--*)
-   ============================================================ */
+/* Circle-style controls: compact, neutral, and clearly interactive. */
 
 .btn {
   position: relative;
@@ -10,7 +7,7 @@
   justify-content: center;
   height: 44px;
   padding: 0 20px;
-  border-radius: 9999px;
+  border-radius: var(--radius);
   overflow: hidden;
   font-family: var(--font-family-body);
   font-size: var(--fs-s);
@@ -30,34 +27,32 @@
 .btn:hover { transform: translateY(-1px); }
 .btn:active { transform: translateY(0); }
 
-/* Primary (lime-green fill, dark text) — matches inDrive header CTA */
 .btn--primary {
-  background: var(--main-green);
-  color: var(--main-dark);
-  border: 2px solid var(--main-green);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: 1px solid var(--primary);
 }
 .btn--primary:hover {
-  background: var(--main-green-hover);
-  border-color: var(--main-green-hover);
-  box-shadow: 0 6px 18px rgba(193, 241, 29, 0.4);
+  background: var(--foreground);
+  border-color: var(--foreground);
+  box-shadow: var(--shadow-s);
 }
 
-/* Secondary (dark fill, white text) — matches inDrive "Get the App" hero CTA */
 .btn--secondary {
-  background: var(--main-dark);
-  color: var(--main-white);
-  border: 2px solid var(--main-dark);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: 1px solid var(--primary);
 }
 .btn--secondary:hover {
-  background: #000;
-  border-color: #000;
+  background: var(--foreground);
+  border-color: var(--foreground);
 }
 
 /* Outline (transparent fill, dark border) */
 .btn--outline {
   background: transparent;
   color: var(--main-dark);
-  border: 2px solid var(--main-dark);
+  border: 1px solid var(--border);
 }
 .btn--outline:hover {
   background: var(--main-dark);
@@ -75,7 +70,6 @@
   color: var(--main-dark);
 }
 
-/* Link style (inline, with chevron) — matches inDrive "Learn more" */
 .btn--link {
   display: inline-flex;
   align-items: center;
@@ -103,7 +97,7 @@
   height: 36px;
   padding: 0 14px;
   font-size: 13px;
-  border-width: 2px;
+  border-width: 1px;
 }
 .btn--lg {
   height: 52px;
@@ -111,7 +105,7 @@
   font-size: var(--fs-m);
 }
 
-/* Ripple slot (visual flourish, mirrors inDrive .pharb8i) */
+/* Ripple slot */
 .btn-ripple {
   position: absolute;
   inset: 0;

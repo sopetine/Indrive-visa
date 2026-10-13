@@ -1,6 +1,6 @@
 /* ============================================================
    VISA ADVISOR — form, modal, combobox, report, action bar
-   Layered on top of the inDrive styleguide (tokens, reset,
+   Layered on top of the Circle styleguide (tokens, reset,
    base, buttons, accessibility).
    ============================================================ */
 
@@ -230,7 +230,7 @@
 .combobox-input:focus {
   outline: none;
   border-color: var(--main-dark);
-  box-shadow: 0 0 0 3px rgba(193, 241, 29, 0.35);
+  box-shadow: 0 0 0 3px rgb(24 24 27 / 12%);
 }
 .combobox-input[aria-expanded="true"] {
   border-color: var(--main-dark);
@@ -285,7 +285,7 @@
   background: var(--soft-beige);
 }
 .combobox-option.is-active {
-  background: var(--main-green);
+  background: var(--primary);
   color: var(--main-dark);
 }
 .combobox-option-code {
@@ -331,7 +331,7 @@
 .comments-textarea:focus {
   outline: none;
   border-color: var(--main-dark);
-  box-shadow: 0 0 0 3px rgba(193, 241, 29, 0.35);
+  box-shadow: 0 0 0 3px rgb(24 24 27 / 12%);
 }
 .field-label--hint {
   font-weight: var(--fw-regular);
@@ -359,7 +359,7 @@
 .text-input:focus {
   outline: none;
   border-color: var(--main-dark);
-  box-shadow: 0 0 0 3px rgba(193, 241, 29, 0.35);
+  box-shadow: 0 0 0 3px rgb(24 24 27 / 12%);
 }
 .field-label--hint {
   font-weight: var(--fw-regular);
@@ -495,7 +495,7 @@
   height: 28px;
   padding: 0 var(--sp-3);
   border-radius: var(--r-pill);
-  background: var(--main-green);
+  background: var(--primary);
   color: var(--main-dark);
   font-size: var(--fs-xs);
   font-weight: var(--fw-semibold);
@@ -538,11 +538,11 @@
   font-weight: var(--fw-medium);
 }
 .action-bar-progress-step.is-active::before {
-  background: var(--main-green);
+  background: var(--primary);
   transform: scale(1.25);
 }
 .action-bar-progress-step.is-done { color: var(--text-and-icon-primary); }
-.action-bar-progress-step.is-done::before { background: var(--main-green); }
+.action-bar-progress-step.is-done::before { background: var(--primary); }
 
 .action-bar-progress-track {
   height: 4px;
@@ -554,7 +554,7 @@
   display: block;
   height: 100%;
   width: 0;
-  background: var(--main-green);
+  background: var(--primary);
   border-radius: inherit;
   transition: width var(--dur-medium) var(--ease);
 }
@@ -583,7 +583,7 @@
   width: 48px;
   height: 48px;
   border-radius: var(--r-pill);
-  background: var(--main-green);
+  background: var(--primary);
   margin: 0 auto var(--sp-4);
   animation: pulse 1.4s var(--ease) infinite;
 }
@@ -653,7 +653,7 @@
 }
 .report-body[hidden] { display: none; }
 
-/* Status hero (the big answer) — solid color block, indrive-style stat callout */
+/* Status hero (the big answer) — solid color block, Circle-style stat callout */
 .report-status {
   display: flex;
   align-items: center;
@@ -685,13 +685,13 @@
   line-height: 1.2;
 }
 .status-badge {
-  background: var(--main-green);
+  background: var(--primary);
   color: var(--main-dark);
 }
 .status-badge .icon-chip { width: 32px; height: 32px; background: rgba(255, 255, 255, 0.55); color: inherit; }
 .status-badge .icon-chip .material-symbols-outlined { font-size: 20px; }
 
-/* Status color coding — pastel tones from the inDrive information-triad
+/* Status color coding — pastel tones from the Circle information-triad
    palette, ordered roughly by how restrictive the status is. */
 .status-badge--visa-free   { background: var(--information-light-brandlight); color: var(--information-dark-branddark); }
 .status-badge--eta,
@@ -818,7 +818,7 @@
   width: 6px;
   height: 6px;
   border-radius: var(--r-pill);
-  background: var(--main-green);
+  background: var(--primary);
   margin-top: calc((var(--lh-m) - 6px) / 2);
 }
 .report-section-value--sources {
@@ -853,7 +853,7 @@
 }
 
 /* Official URL CTA */
-.report-section-value--cta {
+.report-section-value.report-section-value--cta {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -861,9 +861,9 @@
   width: 100%;
   min-height: 48px;
   padding: 0 var(--sp-5);
-  background: var(--main-green);
-  color: var(--main-dark);
-  border: 2px solid var(--main-green);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: 2px solid var(--primary);
   border-radius: var(--r-3);
   font-weight: var(--fw-semibold);
   font-size: var(--fs-m);
@@ -871,8 +871,8 @@
   transition: background var(--dur-fast) var(--ease);
 }
 .report-section-value--cta:hover {
-  background: var(--main-green-hover);
-  border-color: var(--main-green-hover);
+  background: var(--foreground);
+  border-color: var(--foreground);
 }
 .report-section-value--cta .material-symbols-outlined { font-size: 18px; }
 @media (max-width: 540px) {
@@ -935,11 +935,11 @@
   color: rgba(255, 255, 255, 0.72);
 }
 .report-disclaimer strong {
-  color: var(--main-green);
+  color: var(--primary);
 }
 .report-disclaimer .material-symbols-outlined {
   font-size: 14px;
-  color: var(--main-green);
+  color: var(--primary);
   vertical-align: -2px;
   margin-right: 4px;
 }
@@ -1054,7 +1054,7 @@
   content: "•";
   position: absolute;
   left: var(--sp-2);
-  color: var(--main-green);
+  color: var(--primary);
   font-weight: var(--fw-bold);
 }
 .modal-footer {
@@ -1281,7 +1281,7 @@
   font-size: var(--fs-xs);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--main-green, #C1F11D);
+  color: var(--primary, #18181b);
   margin-bottom: 4px;
 }
 .cite-tooltip-section {
@@ -1292,7 +1292,7 @@
 .cite-tooltip-quote {
   margin: 0 0 8px;
   padding: 6px 10px;
-  border-left: 2px solid var(--main-green, #C1F11D);
+  border-left: 2px solid var(--primary, #18181b);
   font-style: italic;
   font-size: var(--fs-s);
   color: #E8E9EA;
@@ -1315,7 +1315,7 @@
   color: #9A9B9D;
 }
 .cite-tooltip-flag {
-  color: var(--main-green, #C1F11D);
+  color: var(--primary, #18181b);
   font-weight: var(--fw-semibold, 600);
 }
 .cite-tooltip-quote--missing + .cite-tooltip-foot,
@@ -1410,11 +1410,11 @@
 }
 
 .report-source-tag.is-cited {
-  background: var(--main-green);
+  background: var(--primary);
   color: var(--main-dark);
-  border-color: var(--main-green);
+  border-color: var(--primary);
 }
-.report-source-tag.is-cited:hover { background: var(--main-green-hover); }
+.report-source-tag.is-cited:hover { background: var(--foreground); }
 
 .report-source-tag.is-surveyed {
   background: transparent;
@@ -1592,7 +1592,7 @@
   padding: 12px 14px;
   background: var(--main-white);
   border: 1px solid var(--border-primary);
-  border-left: 4px solid var(--main-green);
+  border-left: 4px solid var(--primary);
   border-radius: var(--r-3);
   box-shadow: none;
 }
@@ -1610,7 +1610,7 @@
 .critical-step-icon.icon-chip--critical-entry,
 .critical-step-icon.icon-chip--critical-doc,
 .critical-step-icon.icon-chip--critical-stale {
-  background: rgba(193, 241, 29, 0.22);
+  background: rgb(24 24 27 / 12%);
   color: var(--main-dark, #141414);
 }
 
@@ -1713,7 +1713,7 @@
 /* ----- Section-level typed critical accent (driven by heading 🚨 [TYPE] prefix) ----- */
 .report-section.is-critical {
   border: 1px solid var(--border-primary);
-  border-left: 4px solid var(--main-green);
+  border-left: 4px solid var(--primary);
   border-radius: var(--r-2, 12px);
   padding: var(--sp-4);
   background: var(--main-white);
@@ -1727,8 +1727,8 @@
 .critical-fact {
   position: relative;
   padding: var(--sp-2) var(--sp-3);
-  border-left: 3px solid var(--main-green);
-  background: rgba(193, 241, 29, 0.14);
+  border-left: 3px solid var(--primary);
+  background: rgb(24 24 27 / 8%);
   border-radius: 0 var(--r-1, 6px) var(--r-1, 6px) 0;
   list-style: none;
 }
@@ -1798,7 +1798,7 @@
   .report-clarify,
   .report-error { background: #1A1A1A; border-color: #2A2A2A; }
 
-  .hl-sm { background: rgba(193, 241, 29, 0.18); color: #C1F11D; }
+  .hl-sm { background: rgb(24 24 27 / 12%); color: #18181b; }
 
   .combobox-input,
   .comments-textarea,
@@ -1809,22 +1809,22 @@
   }
   .combobox-input:focus,
   .comments-textarea:focus,
-  .text-input:focus { border-color: var(--main-green); }
+  .text-input:focus { border-color: var(--primary); }
   .combobox-list {
     background: #1A1A1A;
-    border-color: var(--main-green);
+    border-color: var(--primary);
   }
   .combobox-option { color: #F5F5F6; border-bottom-color: #2A2A2A; }
   .combobox-option:hover,
   .combobox-option[aria-selected="true"] { background: #2A2A2A; }
-  .combobox-option.is-active { background: var(--main-green); color: var(--main-dark); }
+  .combobox-option.is-active { background: var(--primary); color: var(--main-dark); }
   .combobox-option-code { background: #2A2A2A; color: #A8AAAD; }
   .combobox-option.is-active .combobox-option-code { background: rgba(0,0,0,0.25); color: var(--main-dark); }
   .combobox-empty { color: #A8AAAD; }
 
   .radio { border-color: #2A2A2A; color: #F5F5F6; }
   .radio:hover { border-color: #4A4A4A; }
-  .radio:has(input:checked) { border-color: var(--main-green); }
+  .radio:has(input:checked) { border-color: var(--primary); }
 
   .disclosure-panel { background: #0F0F0F; }
   .status-badge .icon-chip { background: rgba(255, 255, 255, 0.12); }
@@ -1844,7 +1844,7 @@
   .action-bar-progress-step::before { background: #2A2A2A; }
   .action-bar-progress-step.is-active { color: #F5F5F6; }
   .action-bar-progress-step.is-active::before,
-  .action-bar-progress-step.is-done::before { background: var(--main-green); }
+  .action-bar-progress-step.is-done::before { background: var(--primary); }
   .route-chip--alt { background: #2A2A2A; color: #F5F5F6; }
 
   .report-caveats {
@@ -1902,9 +1902,9 @@
     border-color: #4A4A4A;
   }
   .report-source-tag.is-cited {
-    background: var(--main-green);
+    background: var(--primary);
     color: var(--main-dark);
-    border-color: var(--main-green);
+    border-color: var(--primary);
   }
   .report-sources-cluster-label { color: #8C8C8C; }
 
@@ -1926,22 +1926,22 @@
     box-shadow: none;
   }
   .before-you-book-title { color: #F5F5F6; }
-  .before-you-book-title .material-symbols-outlined { color: var(--main-green); }
+  .before-you-book-title .material-symbols-outlined { color: var(--primary); }
 
   .critical-step {
     background: #1A1A1A;
     border-color: #2A2A2A;
-    border-left-color: var(--main-green);
+    border-left-color: var(--primary);
     box-shadow: none;
   }
-  .critical-step-number { background: var(--main-green); color: var(--main-dark); }
+  .critical-step-number { background: var(--primary); color: var(--main-dark); }
   .critical-step-icon.icon-chip--critical-money,
   .critical-step-icon.icon-chip--critical-deadline,
   .critical-step-icon.icon-chip--critical-entry,
   .critical-step-icon.icon-chip--critical-doc,
   .critical-step-icon.icon-chip--critical-stale {
-    background: rgba(193, 241, 29, 0.16);
-    color: var(--main-green);
+    background: rgb(24 24 27 / 10%);
+    color: var(--primary);
   }
   .critical-step-label  { color: #9CA3AF; }
   .critical-step-value  { color: #F5F5F6; }
@@ -1952,12 +1952,12 @@
   .report-section.is-critical {
     background: #1A1A1A;
     border-color: #2A2A2A;
-    border-left-color: var(--main-green);
+    border-left-color: var(--primary);
   }
   .report-section.is-critical .report-section-title { color: #F5F5F6; }
-  .critical-title-glyph { color: var(--main-green); }
+  .critical-title-glyph { color: var(--primary); }
 
-  .critical-fact { background: rgba(193, 241, 29, 0.10); border-left-color: var(--main-green); }
+  .critical-fact { background: rgb(24 24 27 / 6%); border-left-color: var(--primary); }
 
   .action-bar-progress-live { color: #FFCB66; }
   .action-bar-progress-live::before { background: #FFCB66; }
@@ -1991,3 +1991,16 @@
   [data-view="report"] .report-critical-item { break-inside: avoid; page-break-inside: avoid; }
   [data-view="report"] .report-section-title, [data-view="report"] .report-doc-group-title { break-after: avoid; page-break-after: avoid; }
 }
+
+/* Circle component finishing styles and token-driven themes. */
+body { background: var(--background); color: var(--foreground); }
+.site-header--advisor { background: var(--card); border-bottom: 1px solid var(--border); }
+.advisor-form, .report-section, .report-status, .report-doc-group, .report-clarify, .modal-card, .before-you-book { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-s); color: var(--foreground); }
+.report-disclaimer { background: var(--muted); border: 1px solid var(--border); color: var(--foreground); }
+.report-disclaimer strong, .report-disclaimer .material-symbols-outlined { color: var(--foreground); }
+.text-input, .comments-textarea, .combobox-input { background: var(--card); color: var(--foreground); border: 1px solid var(--input); border-radius: var(--radius); }
+.text-input:focus, .comments-textarea:focus, .combobox-input:focus { border-color: var(--foreground); box-shadow: 0 0 0 3px color-mix(in oklab, var(--foreground) 12%, transparent); }
+.status-badge { background: var(--muted); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius); }
+mark.hl-sm, .hl-sm { background: var(--muted); color: var(--foreground); }
+.logo-mark { display:inline-grid; place-items:center; width:32px; height:32px; border-radius:var(--radius); background:var(--primary); color:var(--primary-foreground); font-size:18px; font-weight:700; }
+@media (prefers-color-scheme: dark) { body,.site-header--advisor { background:var(--background); color:var(--foreground); } .advisor-form,.report-section,.report-status,.report-doc-group,.report-clarify,.modal-card,.before-you-book,.combobox-list,.disclosure-panel { background:var(--card); border-color:var(--border); color:var(--foreground); } .text-input,.comments-textarea,.combobox-input { background:var(--background); color:var(--foreground); border-color:var(--border); } .report-section-title,.form-subtitle,.field-hint,.field-label,.report-feedback a,.footer-line { color:var(--muted-foreground); } .status-badge,.hl,.hl-sm { background:var(--muted); color:var(--foreground); } }

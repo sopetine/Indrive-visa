@@ -20,12 +20,12 @@
 
 /* 2. Visible focus ring (the original has none) */
 *:focus-visible {
-  outline: 3px solid var(--main-green);
+  outline: 3px solid var(--primary);
   outline-offset: 2px;
 }
 button:focus-visible,
 a:focus-visible {
-  outline-color: var(--main-green);
+  outline-color: var(--primary);
 }
 
 /* 3. Reduced motion — entire page has 0.3s/0.6s transitions */
@@ -183,7 +183,7 @@ a:focus-visible {
 
 /* 9. Focus-within helper for grouped elements */
 .focus-within-ring:focus-within {
-  outline: 3px solid var(--main-green);
+  outline: 3px solid var(--primary);
   outline-offset: 2px;
   border-radius: var(--r-2);
 }
