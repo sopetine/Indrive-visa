@@ -64,7 +64,7 @@ You should see the disclaimer modal on first load. Accept it to reach the form. 
 │   ├── .gitignore
 │   ├── visa-advisor-prompt.md    ← System prompt sent to the LLM (fetched at runtime)
 │   ├── css/
-│   │   ├── tokens.css            ← Design tokens (from inDrive styleguide)
+│   │   ├── tokens.css            ← Circle-derived neutral design tokens
 │   │   ├── reset.css             ← Modern CSS reset
 │   │   ├── base.css              ← Typography, container, badge
 │   │   ├── buttons.css           ← Button system
@@ -83,7 +83,7 @@ You should see the disclaimer modal on first load. Accept it to reach the form. 
         └── index.js              ← Edge handler: CORS → prompt fetch → LLM call → response
 ```
 
-The first five CSS files are **copied verbatim** from the inDrive styleguide (`../css/`) — the inDrive design language is the visual source of truth. If you update the inDrive files, propagate the changes here.
+The styles are hand-authored plain CSS, using Circle's neutral palette and component patterns as visual references. Geist is loaded from Google Fonts under the existing content security policy.
 
 ---
 
@@ -113,7 +113,7 @@ Tested at 360, 414, 768, 1024, 1440 px. No horizontal scroll at any width.
 
 ## Accessibility
 
-Built on top of the inDrive a11y baseline (skip link, `:focus-visible` rings, `prefers-reduced-motion`, `forced-colors`, safe-area insets) plus:
+Built on top of the Circle a11y baseline (skip link, `:focus-visible` rings, `prefers-reduced-motion`, `forced-colors`, safe-area insets) plus:
 
 - **Combobox** — full ARIA combobox pattern: `role`, `aria-expanded`, `aria-controls`, `aria-activedescendant`, keyboard nav (↑↓, Enter, Esc, Tab).
 - **Live region** — `[aria-live="polite"]` announces "Visa report ready" and "Copied to clipboard".
@@ -292,7 +292,7 @@ Not in MVP, intentionally:
 
 ## Credits
 
-- **Design language** — derived from the [inDrive.com](https://indrive.com/) styleguide (interior DS).
+- **Design reference** — [Circle UI](https://github.com/ln-dev7/circle); see the repository's `THIRD-PARTY-NOTICES.md` for its MIT notice.
 - **Countries dataset** — curated subset; full list from [imorte/passport-index-data](https://github.com/imorte/passport-index-data) (MIT).
 - **System prompt** — see [`visa-advisor-prompt.md`](./visa-advisor-prompt.md) (route-specific research, official-source priority, grouped document requirements, typed `[MONEY]/[DEADLINE]/[ENTRY]/[DOC]/[STALE]` markers, Research log + Sources envelope).
 - **Disclaimer** — text matches the prompt's `§8f` disclaimer template.

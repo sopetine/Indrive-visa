@@ -17,8 +17,8 @@ body {
   font-family: var(--font-family-body);
   font-size: var(--fs-main-body);
   line-height: var(--lh-compact-body);
-  color: var(--main-dark);
-  background: var(--soft-beige);
+  color: var(--foreground);
+  background: var(--background);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -56,14 +56,14 @@ p { text-wrap: pretty; }
 
 /* Visible focus ring — keyboard accessibility */
 :focus-visible {
-  outline: 2px solid var(--main-dark);
+  outline: 2px solid var(--foreground);
   outline-offset: 2px;
   border-radius: 2px;
 }
 
 button:focus-visible,
 a:focus-visible {
-  outline-color: var(--main-green);
+  outline-color: var(--primary);
   outline-width: 3px;
 }
 
@@ -75,6 +75,6 @@ a:focus-visible {
 
 /* Selection */
 ::selection {
-  background: var(--main-green);
-  color: var(--main-dark);
+  background: var(--primary);
+  color: var(--primary-foreground);
 }

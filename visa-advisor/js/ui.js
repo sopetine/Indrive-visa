@@ -2025,16 +2025,16 @@ function announce(text) {
    ────────────────────────────────────────────────────────── */
 
 const CLIP = {
-  font:     "font-family:'Inter','Helvetica Neue',Arial,sans-serif",
-  fontHead: "font-family:'Inter Tight','Inter','Helvetica Neue',Arial,sans-serif",
-  c_text:   "#141414",
-  c_sub:    "#6A6B6E",
-  c_border: "#E4E5E6",
+  font:     "font-family:'Geist',Arial,sans-serif",
+  fontHead: "font-family:'Geist',Arial,sans-serif",
+  c_text:   "#18181b",
+  c_sub:    "#71717a",
+  c_border: "#e4e4e7",
   c_card:   "#FFFFFF",
-  c_soft:   "#F4F3D8",
-  c_neutral:"#DCDBC7",
-  c_green:  "#C1F11D",
-  c_greenDk:"#9DD90D",
+  c_soft:   "#f7f7f8",
+  c_neutral:"#e4e4e7",
+  c_green:  "#18181b",
+  c_greenDk:"#27272a",
   c_warnBg: "#FFF1C0",
   c_warnBd: "#FFC13C",
   c_warnTxt:"#8C5C00",
@@ -2088,8 +2088,8 @@ function buildReportHtml(md, caveats, annotations, critical, research) {
   const normSt  = (s.visaStatus || "").trim().toLowerCase();
   const stKey   = Object.keys(STATUS_CLASS).find(k => normSt.includes(k)) || "embassy";
   const tone    = STATUS_TONE[stKey];
-  const chipBg  = ({ visa_free: CLIP.c_green, eta: "#E4FF88", evisa: "#E2F4FF", voa: "#E4FFAF", embassy: "#FFF1C0", restricted: "#FFDFDE" })[tone] || "#FFF1C0";
-  const chipFg  = ({ visa_free: CLIP.c_black, eta: CLIP.c_black, evisa: "#2C5F7C", voa: "#3F6207", embassy: CLIP.c_warnTxt, restricted: "#8C2A24" })[tone] || CLIP.c_black;
+  const chipBg  = ({ visa_free: CLIP.c_green, eta: "#f4f4f5", evisa: "#f4f4f5", voa: "#f4f4f5", embassy: "#f4f4f5", restricted: "#f4f4f5" })[tone] || "#f4f4f5";
+  const chipFg  = CLIP.c_black;
   const stay    = s.allowedStay && s.allowedStay.trim() !== "N/A" ? s.allowedStay.trim() : "";
   const statusHtml =
     `<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;` +
