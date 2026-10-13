@@ -79,7 +79,7 @@ function start() {
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 
-  function showReport(params = {}) {
+  async function showReport(params = {}) {
     document.querySelector('[data-view="form"]').hidden = true;
     reportApi.el.hidden = false;
     // Hide any previously-rendered report state immediately so stale
@@ -124,7 +124,7 @@ function start() {
       if (cached) {
         try {
           reportApi.hideProgress();
-          reportApi.renderCached(input, cached);
+          await reportApi.renderCached(input, cached);
           return;
         } catch (err) {
           console.warn("[visa-advisor] cached render failed; refetching:", err);
@@ -148,7 +148,7 @@ function start() {
           if (cachedReport) {
             try {
               reportApi.hideProgress();
-              reportApi.renderCached(parsed, cachedReport);
+              await reportApi.renderCached(parsed, cachedReport);
               return;
             } catch (err) {
               console.warn("[visa-advisor] cached render failed; refetching:", err);
