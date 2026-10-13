@@ -445,3 +445,78 @@ test("report with no checklist evidence shows an honest unavailable state", asyn
   await expect(page.locator(".evidence-checklist")).toContainText("No checklist items could be verified");
   await expect(page.locator(".evidence-checklist-item")).toHaveCount(0);
 });
+
+test("preparation actions toggle accessibly and leave cited evidence unchanged across themes and widths", async ({ page }, testInfo) => {
+  const interactiveReport = {
+    ...report,
+    critical: [
+      { label: "[MONEY] Confirm application fee", value: "Pay before arrival", source: "https://example.gov/fee", type: "money" },
+      { label: "[ENTRY] Check entry conditions", value: "Bring a printed confirmation", source: "https://example.gov/entry", type: "entry" },
+    ],
+  };
+  await page.route("https://visa-advisor.sopetine.workers.dev/", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(interactiveReport) })
+  );
+  await page.goto("/");
+  await page.getByRole("button", { name: "I understand" }).click();
+  await page.getByLabel(/Passport nationality/).fill("Canadian");
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+
+  const actions = page.locator(".critical-step-checkbox");
+  await expect(actions).toHaveCount(2);
+  await expect(actions.nth(0)).toHaveAccessibleName("Confirm application fee Pay before arrival");
+  const progress = page.locator(".before-you-book-progress");
+  await expect(progress).toHaveText("0 of 2 complete");
+  const evidence = page.locator(".evidence-checklist");
+  const snapshot = await evidence.evaluate((el) => ({ text: el.innerText, links: [...el.querySelectorAll("a")].map((a) => [a.textContent, a.href]) }));
+  expect(await page.locator(".before-you-book").evaluate((el) => el.compareDocumentPosition(document.querySelector(".evidence-checklist")) & Node.DOCUMENT_POSITION_FOLLOWING)).toBeTruthy();
+
+  await page.getByLabel("Confirm application fee Pay before arrival").click();
+  await expect(actions.nth(0)).toBeChecked();
+  await expect(progress).toHaveText("1 of 2 complete");
+  for (let step = 0; step < 20; step += 1) {
+    if (await actions.nth(1).evaluate((el) => el === document.activeElement)) break;
+    await page.keyboard.press("Tab");
+  }
+  await expect(actions.nth(1)).toBeFocused();
+  expect(await actions.nth(1).evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe("none");
+  await page.keyboard.press("Space");
+  await expect(actions.nth(1)).toBeChecked();
+  await expect(progress).toHaveText("2 of 2 complete");
+  await actions.nth(1).click();
+  await expect(actions.nth(1)).not.toBeChecked();
+  await expect(progress).toHaveText("1 of 2 complete");
+  expect(await evidence.evaluate((el) => ({ text: el.innerText, links: [...el.querySelectorAll("a")].map((a) => [a.textContent, a.href]) }))).toEqual(snapshot);
+  await expect(page.locator(".before-you-book [aria-live='polite'][aria-atomic='true']")).toHaveCount(1);
+
+  for (const colorScheme of ["light", "dark"]) {
+    await page.emulateMedia({ colorScheme });
+    if (colorScheme === "dark") {
+      const verify = page.locator(".critical-step-verify").first();
+      await expect(verify).toBeVisible();
+      const { color, backgroundColor } = await verify.evaluate((el) => {
+        const style = getComputedStyle(el);
+        return { color: style.color, backgroundColor: style.backgroundColor };
+      });
+      const luminance = (rgb) => {
+        const channels = rgb.match(/[\d.]+/g).slice(0, 3).map(Number).map((channel) => {
+          const value = channel / 255;
+          return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+        });
+        return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+      };
+      const contrast = (Math.max(luminance(color), luminance(backgroundColor)) + 0.05) /
+        (Math.min(luminance(color), luminance(backgroundColor)) + 0.05);
+      expect(contrast).toBeGreaterThanOrEqual(4.5);
+    }
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(actions.nth(0)).toBeVisible();
+      await expect(progress).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`preparation-${colorScheme}-${width}.png`), fullPage: true });
+    }
+  }
+});

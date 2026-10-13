@@ -1575,6 +1575,12 @@
   font-size: 24px;
   color: var(--main-dark, #141414);
 }
+.before-you-book-progress {
+  margin: 0 0 12px;
+  color: var(--text-and-icon-secondary);
+  font-size: var(--fs-s);
+  font-weight: var(--fw-semibold, 600);
+}
 .before-you-book-list {
   list-style: none;
   margin: 0;
@@ -1586,7 +1592,7 @@
 }
 .critical-step {
   display: grid;
-  grid-template-columns: 40px 1fr auto;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 12px 14px;
@@ -1596,6 +1602,19 @@
   border-radius: var(--r-3);
   box-shadow: none;
 }
+.critical-step-checkbox {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--main-dark);
+  cursor: pointer;
+}
+.critical-step-checkbox:focus-visible {
+  outline: 3px solid var(--main-green);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.critical-step-action { display: block; cursor: pointer; }
 .critical-step-icon {
   width: 40px;
   height: 40px;
@@ -1622,6 +1641,7 @@
   color: #6B7280;
 }
 .critical-step-value {
+  display: block;
   margin-top: 2px;
   font-size: var(--fs-m);
   font-weight: var(--fw-semibold, 600);
@@ -1690,7 +1710,7 @@
 /* Mobile: critical-step grid collapses */
 @media (max-width: 539px) {
   .critical-step {
-    grid-template-columns: 40px minmax(0, 1fr) auto;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
     column-gap: 10px;
     row-gap: 8px;
     padding: 12px;
@@ -1705,7 +1725,7 @@
     grid-column: 2;
     grid-row: 1;
   }
-  .critical-step-icon   { grid-column: 1; grid-row: 1; }
+  .critical-step-checkbox { grid-column: 1; grid-row: 1; }
   .report-bullet { flex-wrap: wrap; }
   .report-bullet .verify-links { width: 100%; }
 }
@@ -1945,8 +1965,12 @@
   }
   .critical-step-label  { color: #9CA3AF; }
   .critical-step-value  { color: #F5F5F6; }
+  .before-you-book-progress { color: #A8AAAD; }
+  .critical-step-checkbox { accent-color: var(--main-green); }
   .critical-step-verify {
     color: #F5F5F6;
+    background: #2A2A2A;
+    border-color: #4A4A4A;
   }
 
   .report-section.is-critical {

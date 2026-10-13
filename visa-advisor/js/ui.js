@@ -531,8 +531,6 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
     body.appendChild(renderDocsSection(sections.requiredDocs, titles.requiredDocs, ann, markdown, checklist));
   }
 
-  body.appendChild(renderEvidenceChecklist(checklist));
-
   // Caveats should be seen before the booking checklist and any secondary details.
   if (caveats && caveats.trim()) body.appendChild(renderCaveats(caveats));
 
@@ -549,6 +547,8 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
   if (bookingCritical.length) {
     body.appendChild(renderBeforeYouBook(bookingCritical, sections, ann));
   }
+
+  body.appendChild(renderEvidenceChecklist(checklist));
 
   // Passport validity, Fee, Processing time — small grid
   const grid = document.createElement("div");
@@ -1208,11 +1208,8 @@ function renderBeforeYouBook(critical, sections, annotations) {
   wrap.setAttribute("role", "region");
   wrap.setAttribute("aria-labelledby", "before-you-book-title");
 
-  const items = critical.map((c) => {
+  const items = critical.map((c, index) => {
     const type = c.type && CRITICAL_TYPE_META[c.type] ? c.type : "";
-    const meta = type ? CRITICAL_TYPE_META[type] : null;
-    const icon = meta ? meta.icon : "flag";
-    const tone = meta ? meta.tone : "neutral";
     const label = escapeHtml(stripCriticalPrefix((c.label || "").trim()) || "Action to complete");
     const value = escapeHtml((c.value || "").trim());
     const source = (c.source || "").trim();
@@ -1223,12 +1220,12 @@ function renderBeforeYouBook(critical, sections, annotations) {
     const cls = type ? `critical-step critical-step--${type}` : "critical-step";
     return `
       <li class="${cls}" data-critical-type="${type}">
-        <span class="critical-step-icon icon-chip icon-chip--critical-${tone}" aria-hidden="true">
-          <span class="material-symbols-outlined">${icon}</span>
-        </span>
+        <input class="critical-step-checkbox" type="checkbox" id="before-you-book-${index + 1}" />
         <div class="critical-step-body">
-          <div class="critical-step-label">${label}</div>
-          ${value ? `<div class="critical-step-value">${value}</div>` : ""}
+          <label class="critical-step-action" for="before-you-book-${index + 1}">
+            <span class="critical-step-label">${label}</span>
+            ${value ? `<span class="critical-step-value">${value}</span>` : ""}
+          </label>
         </div>
         ${verify}
       </li>
@@ -1239,8 +1236,15 @@ function renderBeforeYouBook(critical, sections, annotations) {
     <h2 id="before-you-book-title" class="before-you-book-title">
       Before you book
     </h2>
+    <p class="before-you-book-progress" aria-live="polite" aria-atomic="true">0 of ${critical.length} complete</p>
     <ul class="before-you-book-list">${items}</ul>
   `;
+  const progress = wrap.querySelector(".before-you-book-progress");
+  wrap.addEventListener("change", (event) => {
+    if (!event.target.matches(".critical-step-checkbox")) return;
+    const completed = wrap.querySelectorAll(".critical-step-checkbox:checked").length;
+    progress.textContent = `${completed} of ${critical.length} complete`;
+  });
   return wrap;
 }
 
