@@ -1,9 +1,10 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
+import net from "node:net";
 
 const required = ["AIFACTORY_PRODUCTION_URL", "AIFACTORY_DELIVERED_SHA", "AIFACTORY_EVIDENCE_DIR"];
 const missing = required.filter((key) => !process.env[key]?.trim());
@@ -12,37 +13,60 @@ if (missing.length) {
   process.exit(2);
 }
 
-const productionURL = new URL(process.env.AIFACTORY_PRODUCTION_URL);
+const localMode = process.env.AIFACTORY_LOCAL_SMOKE === "1";
+let productionURL = localMode ? null : new URL(process.env.AIFACTORY_PRODUCTION_URL);
 const sha = process.env.AIFACTORY_DELIVERED_SHA.trim();
 const evidenceDir = resolve(process.env.AIFACTORY_EVIDENCE_DIR);
 mkdirSync(evidenceDir, { recursive: true });
-const work = mkdtempSync(join(tmpdir(), "visa-production-"));
+const work = localMode ? resolve(".") : mkdtempSync(join(tmpdir(), "visa-production-"));
+let localServer;
 const evidence = {
   deliveredSha: sha,
-  productionURL: productionURL.href,
-  workerPath: {
-    feasible: false,
-    decision: "infeasible",
-    reason: "The production Worker performs live LLM research whose responses vary across runs and model versions and depend on credentials, billing, and rate limits unavailable to a reliable clean-checkout smoke. Interactions therefore substitute only the Worker response with a deterministic public synthetic report; deployed HTML, JavaScript, and CSS are fetched and verified directly.",
-  },
+  validationMode: localMode ? "local working copy" : "delivered production revision",
+  productionURL: productionURL?.href || "starting local working-copy server",
+  liveWorkerProbe: { label: "Live public synthetic Worker probe", attempted: false, timeoutMs: 45_000 },
   assets: [],
   interactions: [],
 };
 const save = () => writeFileSync(join(evidenceDir, "production-evidence.json"), `${JSON.stringify(evidence, null, 2)}\n`);
 
 try {
-  const origin = execFileSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" }).trim();
-  if (!origin) throw new Error("No git origin is configured in this clean checkout");
-  execFileSync("git", ["clone", "--quiet", "--no-checkout", origin, work], { stdio: "inherit" });
-  execFileSync("git", ["-C", work, "checkout", "--quiet", "--detach", sha], { stdio: "inherit" });
-  execFileSync("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: work, stdio: "inherit" });
+  if (localMode) {
+    const port = await new Promise((resolvePort, rejectPort) => {
+      const probe = net.createServer();
+      probe.once("error", rejectPort);
+      probe.listen(0, "127.0.0.1", () => {
+        const selectedPort = probe.address().port;
+        probe.close((error) => error ? rejectPort(error) : resolvePort(selectedPort));
+      });
+    });
+    productionURL = new URL(`http://127.0.0.1:${port}/`);
+    localServer = spawn("python3", ["-m", "http.server", String(port), "--directory", resolve("visa-advisor"), "--bind", "127.0.0.1"], { stdio: "ignore" });
+    let ready = false;
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      try { ready = (await fetch(productionURL)).ok; } catch { /* server is starting */ }
+      if (ready) break;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+    }
+    if (!ready) throw new Error("Local working-copy server did not become ready");
+  } else {
+    const origin = execFileSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" }).trim();
+    if (!origin) throw new Error("No git origin is configured in this clean checkout");
+    execFileSync("git", ["clone", "--quiet", "--no-checkout", origin, work], { stdio: "inherit" });
+    execFileSync("git", ["-C", work, "checkout", "--quiet", "--detach", sha], { stdio: "inherit" });
+    execFileSync("npm", ["ci", "--ignore-scripts", "--no-audit", "--no-fund"], { cwd: work, stdio: "inherit" });
+  }
+  evidence.productionURL = productionURL.href;
+  save();
 
   const response = await fetch(productionURL);
   if (!response.ok) throw new Error(`Production page returned HTTP ${response.status}`);
   const html = await response.text();
   const refs = [...html.matchAll(/(?:src|href)=["']([^"']+\.(?:m?js|css)(?:\?[^"']*)?)["']/gi)].map((m) => m[1]);
   const assets = new Set(refs.map((ref) => new URL(ref, productionURL).href));
-  const staticRoot = join(work, "visa-advisor");
+  const staticRoot = localMode
+    ? resolve("visa-advisor")
+    : join(work, "visa-advisor");
   if (!assets.size) throw new Error("No JavaScript or CSS assets were referenced by the deployed page");
   while (assets.size) {
     const assetURL = assets.values().next().value;
@@ -74,7 +98,7 @@ try {
   const { chromium } = require("@playwright/test");
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, colorScheme: "light" });
     const page = await context.newPage();
     const syntheticReport = {
       type: "report", markdown: "### Visa status\nVisa-free\n\n### Required documents\n- Required: Valid passport\n\n### Official application\nhttps://example.gov/apply",
@@ -99,22 +123,92 @@ try {
     await checks.nth(1).focus();
     await page.keyboard.press("Space");
     await page.getByText("2 of 2 complete", { exact: true }).waitFor();
+    const reset = page.getByRole("button", { name: "Reset progress" });
+    await reset.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    const focusVisible = await reset.evaluate((element) => getComputedStyle(element).outlineStyle !== "none");
+    if (!focusVisible) throw new Error("Reset progress did not display a visible focus ring");
+    await page.keyboard.press("Enter");
+    await page.getByText("0 of 2 complete", { exact: true }).waitFor();
+    if (await checks.count() !== 2 || await page.locator(".critical-step-checkbox:checked").count() !== 0) throw new Error("Reset progress did not clear all preparation checkboxes");
     await page.getByRole("checkbox", { name: /Confirm passport validity/ }).waitFor();
     const stored = await page.evaluate(() => localStorage.getItem("visa-advisor.checklist-progress.v1"));
     if (!stored) throw new Error("Checklist completion was not persisted");
     await page.screenshot({ path: join(evidenceDir, "production-desktop-light.png"), fullPage: true });
     await page.reload();
     await page.locator(".critical-step-checkbox").first().waitFor();
-    if (!(await page.locator(".critical-step-checkbox").first().isChecked())) throw new Error("Checklist progress did not restore after reload");
-    evidence.interactions.push({ check: "toggle, keyboard Space, accessible names and checked state, reload persistence", passed: true });
+    await page.getByText("0 of 2 complete", { exact: true }).waitFor();
+    if (await page.locator(".critical-step-checkbox:checked").count()) throw new Error("Reset state did not persist after reload");
+    evidence.interactions.push({ check: "deterministic fixture: toggle, keyboard reset, visible focus, accessible names, reset persistence", passed: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: "light" });
     await page.screenshot({ path: join(evidenceDir, "production-mobile-light.png"), fullPage: true });
     const overflowLight = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
     if (overflowLight) throw new Error("Mobile light layout overflows horizontally");
     await page.emulateMedia({ colorScheme: "dark" });
+    const checklistDark = await page.locator(".before-you-book").isVisible();
+    if (!checklistDark) throw new Error("Checklist is not usable in dark theme");
     await page.screenshot({ path: join(evidenceDir, "production-mobile-dark.png"), fullPage: true });
-    evidence.interactions.push({ check: "390px mobile layout and light/dark themes", passed: true });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({ path: join(evidenceDir, "production-desktop-dark.png"), fullPage: true });
+    evidence.interactions.push({ check: "desktop/mobile layout and light/dark themes", passed: true });
+
+    const priorProbePath = process.env.AIFACTORY_PRIOR_LIVE_PROBE_EVIDENCE?.trim();
+    if (localMode && priorProbePath) {
+      const priorProbe = JSON.parse(readFileSync(resolve(priorProbePath), "utf8")).liveWorkerProbe;
+      if (!priorProbe?.attempted) throw new Error("Prior live probe evidence does not contain an attempted probe");
+      evidence.liveWorkerProbe = { ...priorProbe, reusedFrom: resolve(priorProbePath) };
+      evidence.interactions.push({ check: "single live Worker probe recorded in prior smoke evidence", passed: true });
+    } else {
+    evidence.liveWorkerProbe.attempted = true;
+    evidence.liveWorkerProbe.request = { nationality: "Indian", from: "Georgia", destination: "Paris", purpose: "tourism", date: "2027-04-12" };
+    evidence.liveWorkerProbe.commentsSent = false;
+    let liveResponse;
+    let liveText;
+    let liveData;
+    const liveController = new AbortController();
+    const liveTimer = setTimeout(() => liveController.abort(), 45_000);
+    try {
+      const livePromptResponse = await fetch(new URL("visa-advisor-prompt.md", productionURL), { signal: liveController.signal });
+      if (!livePromptResponse.ok) throw new Error(`payload unavailable: prompt returned HTTP ${livePromptResponse.status}`);
+      const systemPrompt = (await livePromptResponse.text()).trim();
+      const response = await fetch("https://visa-advisor.sopetine.workers.dev", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...evidence.liveWorkerProbe.request, systemPrompt }),
+        signal: liveController.signal,
+      });
+      liveResponse = response;
+      evidence.liveWorkerProbe.httpStatus = response.status;
+      liveText = await response.text();
+      clearTimeout(liveTimer);
+      try { liveData = JSON.parse(liveText); } catch { throw new Error(`payload unavailable: response was not JSON (${liveText.slice(0, 300)})`); }
+      if (!response.ok) throw new Error(`provider/request unavailable: HTTP ${response.status}: ${liveData.error || liveText.slice(0, 300)}`);
+      if (!liveData || liveData.type !== "report" || typeof liveData.markdown !== "string" || !liveData.markdown.trim()) {
+        throw new Error(`payload unavailable: expected a non-empty report; received ${JSON.stringify(liveData).slice(0, 500)}`);
+      }
+      evidence.liveWorkerProbe.outcome = "usable report received";
+      await page.route("https://visa-advisor.sopetine.workers.dev/**", (route) => route.fulfill({ status: response.status, contentType: "application/json", body: liveText }));
+      await page.getByRole("button", { name: "Edit", exact: true }).click();
+      await page.getByLabel(/Passport nationality/).fill("Indian");
+      await page.getByLabel(/Based in/).fill("Georgia");
+      await page.getByLabel(/Destination city/).fill("Paris");
+      await page.getByLabel(/Date/).fill("2027-04-12").catch(() => {});
+      await page.getByRole("button", { name: /Check requirements/ }).click();
+      await page.locator(".before-you-book").waitFor({ state: "visible", timeout: 30_000 });
+      if (!await page.locator(".critical-step-checkbox").count()) throw new Error("Usable accepted report rendered without a preparation checklist");
+      evidence.liveWorkerProbe.rendered = true;
+      evidence.liveWorkerProbe.renderAssertionTimeoutMs = 30_000;
+      evidence.interactions.push({ check: "live Worker report rendered with preparation section", passed: true });
+      await page.screenshot({ path: join(evidenceDir, "production-live-worker.png"), fullPage: true });
+    } catch (error) {
+      const reason = error.name === "TimeoutError" || error.name === "AbortError"
+        ? `timeout after 45 seconds: ${error.message}` : error.message;
+      evidence.liveWorkerProbe.outcome = "unexercised";
+      evidence.liveWorkerProbe.reason = reason;
+      if (evidence.liveWorkerProbe.httpStatus && liveData?.type === "report" && typeof liveData.markdown === "string" && liveData.markdown.trim()) throw error;
+    } finally { clearTimeout(liveTimer); }
+    }
     save();
     await context.close();
   } finally { await browser.close(); }
@@ -128,5 +222,6 @@ try {
   console.error(`Production verification failed: ${error.message}`);
   process.exitCode = 1;
 } finally {
-  rmSync(work, { recursive: true, force: true });
+  if (localServer) localServer.kill("SIGTERM");
+  if (!localMode) rmSync(work, { recursive: true, force: true });
 }

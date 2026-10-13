@@ -93,6 +93,12 @@ test("preparation checklist remains interactive when progress storage throws", a
   await expect(page.locator(".critical-step-checkbox")).toHaveCount(2);
   await page.locator(".critical-step-checkbox").nth(0).check();
   await expect(page.locator(".before-you-book-progress")).toHaveText("1 of 2 complete");
+  await page.locator(".critical-step-checkbox").nth(1).check();
+  await page.getByRole("button", { name: "Reset progress" }).click();
+  await expect(page.locator(".critical-step-checkbox:checked")).toHaveCount(0);
+  await expect(page.locator(".before-you-book-progress")).toHaveText("0 of 2 complete");
+  await page.locator(".critical-step-checkbox").nth(1).check();
+  await expect(page.locator(".before-you-book-progress")).toHaveText("1 of 2 complete");
 });
 
 test("preparation checklist remains interactive when progress writes throw", async ({ page }) => {
@@ -111,8 +117,66 @@ test("preparation checklist remains interactive when progress writes throw", asy
   if (await disclaimer.isVisible()) await disclaimer.click();
   await page.evaluate(() => { location.hash = "#/report?nat=Russian&from=Georgia&dst=Paris"; });
   await expect(page.locator(".critical-step-checkbox")).toHaveCount(2);
+  await page.locator(".critical-step-checkbox").nth(0).check();
+  await page.locator(".critical-step-checkbox").nth(1).check();
+  await page.getByRole("button", { name: "Reset progress" }).click();
+  await expect(page.locator(".critical-step-checkbox:checked")).toHaveCount(0);
+  await expect(page.locator(".before-you-book-progress")).toHaveText("0 of 2 complete");
   await page.locator(".critical-step-checkbox").nth(1).check();
   await expect(page.locator(".before-you-book-progress")).toHaveText("1 of 2 complete");
+});
+
+test("reset progress clears only the current report and persists after reload", async ({ page }) => {
+  await page.route("https://visa-advisor.sopetine.workers.dev/**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(actionReport) });
+  });
+  await page.goto("/");
+  const disclaimer = page.getByRole("button", { name: "I understand" });
+  if (await disclaimer.isVisible()) await disclaimer.click();
+  await page.evaluate(() => localStorage.setItem("visa-advisor.checklist-progress.v1", JSON.stringify({
+    ["a".repeat(64)]: [true, false],
+  })));
+  await page.evaluate(() => { location.hash = "#/report?nat=Russian&from=Georgia&dst=Paris"; });
+  await expect(page.locator(".critical-step-checkbox")).toHaveCount(2);
+  await page.locator(".critical-step-checkbox").first().check();
+  await page.evaluate(() => { location.hash = "#/report?nat=Russian&from=Georgia&dst=Rome"; });
+  await page.locator(".critical-step-checkbox").nth(1).check();
+  const withB = await page.evaluate(() => JSON.parse(localStorage.getItem("visa-advisor.checklist-progress.v1")));
+  const aId = Object.keys(withB).find((id) => id !== "a".repeat(64) && JSON.stringify(withB[id]) === "[true,false]");
+  const bId = Object.keys(withB).find((id) => id !== "a".repeat(64) && id !== aId);
+  expect(aId).toBeTruthy();
+  expect(bId).toBeTruthy();
+  await page.evaluate(() => { location.hash = "#/report?nat=Russian&from=Georgia&dst=Paris"; });
+  await page.getByRole("button", { name: "Reset progress" }).click();
+  await expect(page.locator(".critical-step-checkbox:checked")).toHaveCount(0);
+  await expect(page.locator(".before-you-book-progress")).toHaveText("0 of 2 complete");
+  await page.reload();
+  await expect(page.locator(".before-you-book-progress")).toHaveText("0 of 2 complete");
+  const after = await page.evaluate(() => JSON.parse(localStorage.getItem("visa-advisor.checklist-progress.v1")));
+  expect(after[aId]).toEqual([false, false]);
+  expect(after[bId]).toEqual([false, true]);
+  expect(after["a".repeat(64)]).toEqual([true, false]);
+});
+
+test("reset progress is keyboard operable with a visible focus indicator", async ({ page }) => {
+  await page.route("https://visa-advisor.sopetine.workers.dev/**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(actionReport) });
+  });
+  await page.goto("/");
+  const disclaimer = page.getByRole("button", { name: "I understand" });
+  if (await disclaimer.isVisible()) await disclaimer.click();
+  await page.getByLabel(/Passport nationality/).fill("Russian");
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+  const reset = page.getByRole("button", { name: "Reset progress" });
+  await reset.focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(reset).toBeFocused();
+  expect(await reset.evaluate((el) => getComputedStyle(el).outlineStyle)).not.toBe("none");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".before-you-book-progress")).toHaveText("0 of 2 complete");
 });
 
 test("checklist progress is isolated by trip, comments, intent, and action-set identity", async ({ page }) => {
