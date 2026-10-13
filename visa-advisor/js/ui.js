@@ -509,7 +509,50 @@ function reportCacheAgeText(envelope) {
  *                                            sourcesReturned: number,
  *                                            researchWarning: string }
  */
-export function renderReport(body, markdown, annotations, critical, caveats, research) {
+const CHECKLIST_PROGRESS_KEY = "visa-advisor.checklist-progress.v1";
+const CHECKLIST_PROGRESS_LIMIT = 30;
+
+async function opaqueReportId(input, actions) {
+  const digest = async (value) => {
+    const bytes = new TextEncoder().encode(JSON.stringify(value));
+    const hash = await crypto.subtle.digest("SHA-256", bytes);
+    return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  };
+  const normalize = (value) => String(value || "").trim().toLowerCase();
+  const commentsDigest = await digest(normalize(input?.comments));
+  const tripDigest = await digest(["trip-v1", normalize(input?.nationality), normalize(input?.from || input?.arrival), normalize(input?.destination), normalize(input?.tripIntent || "entry"), normalize(input?.date), normalize(input?.purpose), commentsDigest]);
+  const actionDigest = await digest(actions.map((item) => [normalize(item.label), normalize(item.value), normalize(item.type), normalize(item.source)]));
+  return digest(["checklist-progress-v1", tripDigest, actionDigest]);
+}
+
+function readChecklistFlags(reportId, count) {
+  try {
+    const raw = window.localStorage.getItem(CHECKLIST_PROGRESS_KEY);
+    if (!raw) return Array(count).fill(false);
+    const records = JSON.parse(raw);
+    const flags = records && records[reportId];
+    return Array.isArray(flags) && flags.length === count && flags.every((flag) => typeof flag === "boolean")
+      ? flags.slice() : Array(count).fill(false);
+  } catch { return Array(count).fill(false); }
+}
+
+function writeChecklistFlags(reportId, flags) {
+  try {
+    const storage = window.localStorage;
+    let records = {};
+    try { records = JSON.parse(storage.getItem(CHECKLIST_PROGRESS_KEY) || "{}"); } catch {}
+    if (!records || typeof records !== "object" || Array.isArray(records)) records = {};
+    records = Object.fromEntries(Object.entries(records).filter(([id, flags]) =>
+      /^[a-f0-9]{64}$/.test(id) && Array.isArray(flags) && flags.every((flag) => typeof flag === "boolean")
+    ));
+    records[reportId] = flags;
+    const keys = Object.keys(records);
+    while (keys.length > CHECKLIST_PROGRESS_LIMIT) delete records[keys.shift()];
+    storage.setItem(CHECKLIST_PROGRESS_KEY, JSON.stringify(records));
+  } catch { /* storage is optional; current-session state remains active */ }
+}
+
+export async function renderReport(body, markdown, annotations, critical, caveats, research, input = {}) {
   body.innerHTML = "";
 
   const sections  = parseSections(markdown);
@@ -545,7 +588,10 @@ export function renderReport(body, markdown, annotations, critical, caveats, res
   // "Before you book" numbered checklist (critical types drive color)
   const bookingCritical = crit.filter((item) => item.type !== "doc");
   if (bookingCritical.length) {
-    body.appendChild(renderBeforeYouBook(bookingCritical, sections, ann));
+    let reportId = null;
+    try { reportId = await opaqueReportId(input, bookingCritical); } catch { /* keep checklist usable without persistence */ }
+    const flags = reportId ? readChecklistFlags(reportId, bookingCritical.length) : Array(bookingCritical.length).fill(false);
+    body.appendChild(renderBeforeYouBook(bookingCritical, sections, ann, flags, reportId));
   }
 
   body.appendChild(renderEvidenceChecklist(checklist));
@@ -1202,7 +1248,7 @@ function renderResearchMetaLine({ queries, citedSources, sources, inlineCitation
   return `Research: ${parts.join(" · ")}`;
 }
 
-function renderBeforeYouBook(critical, sections, annotations) {
+function renderBeforeYouBook(critical, sections, annotations, flags = [], reportId = null) {
   const wrap = document.createElement("aside");
   wrap.className = "before-you-book";
   wrap.setAttribute("role", "region");
@@ -1220,7 +1266,7 @@ function renderBeforeYouBook(critical, sections, annotations) {
     const cls = type ? `critical-step critical-step--${type}` : "critical-step";
     return `
       <li class="${cls}" data-critical-type="${type}">
-        <input class="critical-step-checkbox" type="checkbox" id="before-you-book-${index + 1}" />
+        <input class="critical-step-checkbox" type="checkbox" id="before-you-book-${index + 1}" ${flags[index] ? "checked" : ""} />
         <div class="critical-step-body">
           <label class="critical-step-action" for="before-you-book-${index + 1}">
             <span class="critical-step-label">${label}</span>
@@ -1236,7 +1282,7 @@ function renderBeforeYouBook(critical, sections, annotations) {
     <h2 id="before-you-book-title" class="before-you-book-title">
       Before you book
     </h2>
-    <p class="before-you-book-progress" aria-live="polite" aria-atomic="true">0 of ${critical.length} complete</p>
+    <p class="before-you-book-progress" aria-live="polite" aria-atomic="true">${flags.filter(Boolean).length} of ${critical.length} complete</p>
     <ul class="before-you-book-list">${items}</ul>
   `;
   const progress = wrap.querySelector(".before-you-book-progress");
@@ -1244,6 +1290,7 @@ function renderBeforeYouBook(critical, sections, annotations) {
     if (!event.target.matches(".critical-step-checkbox")) return;
     const completed = wrap.querySelectorAll(".critical-step-checkbox:checked").length;
     progress.textContent = `${completed} of ${critical.length} complete`;
+    if (reportId) writeChecklistFlags(reportId, [...wrap.querySelectorAll(".critical-step-checkbox")].map((checkbox) => checkbox.checked));
   });
   return wrap;
 }
@@ -1951,13 +1998,14 @@ export function initReportView({ onEdit }) {
         critical:    root._lastCritical,
         ...root._lastResearch,
       });
-      renderReport(
+      await renderReport(
         root.body,
         data.markdown,
         root._lastAnnotations,
         root._lastCritical,
         root._lastCaveats,
         root._lastResearch,
+        input,
       );
 
       // Brief beat so the user sees "Compiling your report" land before swap.
@@ -1988,7 +2036,7 @@ export function initReportView({ onEdit }) {
      the network. Mirrors runQuery's success path: hydrates the
      report's internal state (so Copy / Edit still work), calls
      renderReport, and shows the body. */
-  function renderCached(input, envelope) {
+  async function renderCached(input, envelope) {
     if (!envelope || typeof envelope.markdown !== "string") {
       throw new Error("renderCached: invalid envelope");
     }
@@ -2006,13 +2054,14 @@ export function initReportView({ onEdit }) {
       researchWarning:  typeof envelope.researchWarning === "string" ? envelope.researchWarning : "",
       checklist: envelope.checklist || null,
     };
-    renderReport(
+    await renderReport(
       root.body,
       root._lastMarkdown,
       root._lastAnnotations,
       root._lastCritical,
       root._lastCaveats,
       root._lastResearch,
+      input,
     );
     show("report");
     announce(`Showing cached report (${reportCacheAgeText(envelope)})`);

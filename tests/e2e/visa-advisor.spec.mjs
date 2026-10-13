@@ -28,6 +28,124 @@ const report = {
   },
 };
 
+const actionReport = {
+  ...report,
+  critical: [
+    { label: "Confirm passport validity", value: "Six months remaining", type: "rule", source: "https://example.gov/passport" },
+    { label: "Check transit rules", value: "Before booking", type: "rule", source: "https://example.gov/transit" },
+  ],
+};
+
+test("preparation progress restores only for the same opaque report identity", async ({ page }) => {
+  await page.route("https://visa-advisor.sopetine.workers.dev/**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(actionReport) });
+  });
+  await page.goto("/");
+  const disclaimer = page.getByRole("button", { name: "I understand" });
+  if (await disclaimer.isVisible()) await disclaimer.click();
+  await page.evaluate(() => localStorage.setItem("visa-advisor.checklist-progress.v1", JSON.stringify({
+    Russian: ["Paris", "private trip comment"],
+    ["a".repeat(64)]: ["not a completion flag"],
+  })));
+  await page.getByLabel(/Passport nationality/).fill("Russian");
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await page.getByLabel(/Comments/).fill("synthetic private comment");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+  const checks = page.locator(".critical-step-checkbox");
+  await expect(checks).toHaveCount(2);
+  await checks.nth(0).check();
+  await checks.nth(1).focus();
+  await page.keyboard.press("Space");
+  await expect(page.locator(".before-you-book-progress")).toHaveText("2 of 2 complete");
+  const saved = await page.evaluate(() => localStorage.getItem("visa-advisor.checklist-progress.v1"));
+  expect(saved).toMatch(/^\{"[a-f0-9]{64}":\[true,true\]\}$/);
+  for (const privateValue of ["synthetic private comment", "Russian", "Georgia", "Paris", "2026-11-11", "business", "entry"]) {
+    expect(saved).not.toContain(privateValue);
+  }
+  expect(Object.values(JSON.parse(saved))[0].every((flag) => typeof flag === "boolean")).toBe(true);
+
+  await page.reload();
+  await expect(page.locator(".critical-step-checkbox").nth(0)).toBeChecked();
+  await expect(page.locator(".critical-step-checkbox").nth(1)).toBeChecked();
+  await expect(page.locator(".before-you-book-progress")).toHaveText("2 of 2 complete");
+
+  await page.evaluate(() => { location.hash = "#/report?nat=Russian&from=Georgia&dst=Rome"; });
+  await expect(page.locator(".critical-step-checkbox").nth(0)).not.toBeChecked();
+  await expect(page.locator(".before-you-book-progress")).toHaveText("0 of 2 complete");
+});
+
+test("preparation checklist remains interactive when progress storage throws", async ({ page }) => {
+  await page.route("https://visa-advisor.sopetine.workers.dev/**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(actionReport) });
+  });
+  await page.addInitScript(() => {
+    const originalGet = Storage.prototype.getItem;
+    Object.defineProperty(Storage.prototype, "getItem", { configurable: true, value(key) {
+      if (key === "visa-advisor.checklist-progress.v1") throw new Error("read denied");
+      return Reflect.apply(originalGet, this, [key]);
+    }});
+  });
+  await page.goto("/");
+  const disclaimer = page.getByRole("button", { name: "I understand" });
+  if (await disclaimer.isVisible()) await disclaimer.click();
+  await page.evaluate(() => { location.hash = "#/report?nat=Russian&from=Georgia&dst=Paris"; });
+  await expect(page.locator(".critical-step-checkbox")).toHaveCount(2);
+  await page.locator(".critical-step-checkbox").nth(0).check();
+  await expect(page.locator(".before-you-book-progress")).toHaveText("1 of 2 complete");
+});
+
+test("preparation checklist remains interactive when progress writes throw", async ({ page }) => {
+  await page.route("https://visa-advisor.sopetine.workers.dev/**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(actionReport) });
+  });
+  await page.addInitScript(() => {
+    const originalSet = Storage.prototype.setItem;
+    Object.defineProperty(Storage.prototype, "setItem", { configurable: true, value(key, value) {
+      if (key === "visa-advisor.checklist-progress.v1") throw new Error("write denied");
+      return Reflect.apply(originalSet, this, [key, value]);
+    }});
+  });
+  await page.goto("/");
+  const disclaimer = page.getByRole("button", { name: "I understand" });
+  if (await disclaimer.isVisible()) await disclaimer.click();
+  await page.evaluate(() => { location.hash = "#/report?nat=Russian&from=Georgia&dst=Paris"; });
+  await expect(page.locator(".critical-step-checkbox")).toHaveCount(2);
+  await page.locator(".critical-step-checkbox").nth(1).check();
+  await expect(page.locator(".before-you-book-progress")).toHaveText("1 of 2 complete");
+});
+
+test("checklist progress is isolated by trip, comments, intent, and action-set identity", async ({ page }) => {
+  await page.route("https://visa-advisor.sopetine.workers.dev/**", async (route) => {
+    const input = route.request().postDataJSON();
+    const payload = input.destination === "Tokyo"
+      ? { ...actionReport, critical: actionReport.critical.slice(0, 1) }
+      : actionReport;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
+  });
+  await page.goto("/");
+  const disclaimer = page.getByRole("button", { name: "I understand" });
+  if (await disclaimer.isVisible()) await disclaimer.click();
+  await page.getByLabel(/Passport nationality/).fill("Russian");
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+  await page.locator(".critical-step-checkbox").first().check();
+  const variants = [
+    ["nat=Canadian&from=Georgia&dst=Paris", 2],
+    ["nat=Russian&from=Armenia&dst=Paris", 2],
+    ["nat=Russian&from=Georgia&dst=Rome", 2],
+    ["nat=Russian&from=Georgia&dst=Paris&intent=airport-transit", 2],
+    ["nat=Russian&from=Georgia&dst=Paris&comments=another-note", 2],
+    ["nat=Russian&from=Georgia&dst=Tokyo", 1],
+  ];
+  for (const [query, count] of variants) {
+    await page.evaluate((value) => { location.hash = `#/report?${value}`; }, query);
+    await expect(page.locator(".critical-step-checkbox")).toHaveCount(count);
+    await expect(page.locator(".before-you-book-progress")).toHaveText(`0 of ${count} complete`);
+  }
+});
+
 test("required route, private comments, distinct trip context, and research warning work end to end", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-11-10T20:30:00Z") });
   let calls = 0;
@@ -49,7 +167,8 @@ test("required route, private comments, distinct trip context, and research warn
   });
 
   await page.goto("/");
-  await page.getByRole("button", { name: "I understand" }).click();
+  const disclaimer = page.getByRole("button", { name: "I understand" });
+  if (await disclaimer.isVisible().catch(() => false)) await disclaimer.click();
   const submit = page.getByRole("button", { name: /Check requirements/ });
   await expect(submit).toBeDisabled();
   await page.getByLabel(/Passport nationality/).fill("Russian");
