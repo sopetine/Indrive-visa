@@ -276,6 +276,13 @@ export default {
         ? `${warning} ${parsed.researchWarning}`
         : warning;
     }
+    if (parsed.type === "report" && parsed.checklist) {
+      parsed.checklist.warnings = parsed.researchWarning ? [parsed.researchWarning] : [];
+      parsed.checklist.items = parsed.checklist.items.map((item) => ({
+        ...item,
+        warnings: item.status === "supported" && parsed.researchWarning ? [parsed.researchWarning] : [],
+      }));
+    }
 
     clearTimeout(upstreamTimer);request.signal.removeEventListener("abort", abortUpstream);
     return json(parsed, 200, origin);
@@ -573,6 +580,7 @@ function parseContract(data, serverSources = [], tavilyResults = []) {
             : {}),
           ...(factMatches.length ? { factMatches } : {}),
           ...(annotations.length ? { annotations } : {}),
+          checklist: buildEvidenceChecklist(parsed.markdown.trim(), annotations, merged, parsed.critical, "", text),
           ...(searchCalls.length ? { searchCalls } : {}),
           ...(searchQueries.length ? { searchQueries } : {}),
           ...(merged.length ? { sources: merged } : {}),
@@ -599,6 +607,7 @@ function parseContract(data, serverSources = [], tavilyResults = []) {
           ...(annotations.length ? { annotations } : {}),
           ...(searchCalls.length ? { searchCalls } : {}),
           ...(fallbackMerged.length ? { sources: fallbackMerged } : {}),
+          checklist: buildEvidenceChecklist(salvaged.markdown, annotations, fallbackMerged, null, "", text),
           ...(serverSources.length ? { serverSearchAvailable: true } : {}),
           parseDegraded: true,
         };
@@ -615,8 +624,51 @@ function parseContract(data, serverSources = [], tavilyResults = []) {
   if (annotations.length) out.annotations = annotations;
   if (searchCalls.length) out.searchCalls = searchCalls;
   if (fallbackMerged.length) out.sources = fallbackMerged;
+  out.checklist = buildEvidenceChecklist(out.markdown, annotations, fallbackMerged, null, "", text);
   if (serverSources.length) out.serverSearchAvailable = true;
   return out;
+}
+
+// Checklist entries are only actionable when a citation annotation overlaps
+// the exact claim. A source list alone proves that research happened, not that
+// it supports a particular requirement.
+function buildEvidenceChecklist(markdown, annotations, sources, critical, researchWarning, responseText = "") {
+  const cleanAnnotations = Array.isArray(annotations) ? annotations : [];
+  const linked = (start, end) => [...new Map(cleanAnnotations
+    .map((a) => {
+      let annotationStart = a.start;
+      let annotationEnd = a.end;
+      if (responseText && a.start >= 0 && a.end > a.start) {
+        const citedText = responseText.slice(a.start, a.end).replace(/\\n/g, "\n");
+        const markdownStart = citedText ? markdown.indexOf(citedText) : -1;
+        if (markdownStart >= 0) { annotationStart = markdownStart; annotationEnd = markdownStart + citedText.length; }
+      }
+      return { ...a, _start: annotationStart, _end: annotationEnd };
+    })
+    .filter((a) => /^https?:\/\//i.test(a.url || "") && a._start >= 0 && a._end > start && a._start < end)
+    .map((a) => [a.url, { title: a.title || a.url, url: a.url }])).values()];
+  const items = [];
+  const heading = /^#{1,6}\s+required documents[^\n]*\n([\s\S]*?)(?=\n#{1,6}\s|(?![\s\S]))/im.exec(markdown);
+  if (heading) {
+    const offset = heading.index + heading[0].indexOf(heading[1]);
+    for (const match of heading[1].matchAll(/^\s*[-*+]\s+(.+)$/gm)) {
+      const start = offset + match.index + match[0].indexOf(match[1]);
+      const end = start + match[1].length;
+      const citedBy = linked(start, end);
+      items.push({ category: "document", text: match[1].trim(), status: citedBy.length ? "supported" : "unknown", sources: citedBy,
+        warnings: citedBy.length && researchWarning ? [researchWarning] : [] });
+    }
+  }
+  for (const step of Array.isArray(critical) ? critical.filter((item) => item.type !== "doc") : []) {
+    const source = (step.source || "").trim();
+    const cite = cleanAnnotations.find((a) => a.url === source && /^https?:\/\//i.test(source));
+    if (!cite) continue;
+    items.push({ category: "next-step", text: [step.label, step.value].filter(Boolean).join(": "), status: "supported",
+      sources: [{ title: cite.title || source, url: source }], warnings: researchWarning ? [researchWarning] : [] });
+  }
+  const cited = items.some((item) => item.status === "supported");
+  return { status: cited ? "available" : "unavailable", items, message: cited ? "" : "No checklist items could be verified against cited research.",
+    warnings: researchWarning ? [researchWarning] : [] };
 }
 
 /* Regex-only, best-effort recovery of the two highest-value fields when

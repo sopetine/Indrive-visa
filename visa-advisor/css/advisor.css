@@ -1966,6 +1966,14 @@
 .print-report-header { display: none; }
 .print-fallback { margin: 0.75rem auto; max-width: 900px; padding: 0.75rem 1rem; border: 1px solid var(--border-primary); border-radius: var(--r-3); }
 .print-fallback[hidden] { display: none; }
+.evidence-checklist { min-width: 0; }
+.evidence-checklist-list { margin: 0; padding-left: 1.25rem; }
+.evidence-checklist-item { margin: 0.75rem 0; overflow-wrap: anywhere; }
+.evidence-checklist-item a { display: inline-block; margin-left: 0.5rem; overflow-wrap: anywhere; word-break: break-word; }
+.checklist-state { display: inline-block; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; }
+.checklist-warning, .checklist-unavailable { overflow-wrap: anywhere; }
+.print-evidence-checklist { margin-top: 16px; padding: 20px 24px; border: 1px solid #ddd; border-radius: 16px; overflow-wrap: anywhere; }
+.print-evidence-checklist a { overflow-wrap: anywhere; word-break: break-word; }
 @media print {
   @page { margin: 16mm; }
   html, body { background: #fff !important; color: #111 !important; font-size: 10.5pt; }
