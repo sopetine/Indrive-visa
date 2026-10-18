@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test:e2e": "playwright test",
+    "test:e2e": "node ./node_modules/@playwright/test/cli.js test",
     "test:worker": "node --test worker/test/*.test.mjs",
     "test:production": "node scripts/test-production.mjs",
     "test:occupied-port": "node scripts/test-occupied-port.mjs",

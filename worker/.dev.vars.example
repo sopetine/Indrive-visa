@@ -1,4 +1,5 @@
-# Local secrets for `wrangler dev`. Copy to `.dev.vars` and fill in real values.
+# Local secrets for `wrangler dev`. Copy to `.dev.vars` and fill in local values.
+# LLM_API_KEY is the OpenCode Go API key; model ID and endpoint are set in wrangler.toml.
 # `.dev.vars` is git-ignored.
 LLM_API_KEY="sk-cp-REPLACE_ME"
 TAVILY_API_KEY="tvly-REPLACE_ME"

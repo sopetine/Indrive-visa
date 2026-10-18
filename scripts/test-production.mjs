@@ -154,13 +154,14 @@ try {
     await page.screenshot({ path: join(evidenceDir, "production-desktop-dark.png"), fullPage: true });
     evidence.interactions.push({ check: "desktop/mobile layout and light/dark themes", passed: true });
 
-    const priorProbePath = process.env.AIFACTORY_PRIOR_LIVE_PROBE_EVIDENCE?.trim();
-    if (localMode && priorProbePath) {
-      const priorProbe = JSON.parse(readFileSync(resolve(priorProbePath), "utf8")).liveWorkerProbe;
-      if (!priorProbe?.attempted) throw new Error("Prior live probe evidence does not contain an attempted probe");
-      evidence.liveWorkerProbe = { ...priorProbe, reusedFrom: resolve(priorProbePath) };
-      evidence.interactions.push({ check: "single live Worker probe recorded in prior smoke evidence", passed: true });
-    } else {
+    if (process.env.AIFACTORY_LIVE_WORKER_PROBE === "1") {
+      const priorProbePath = process.env.AIFACTORY_PRIOR_LIVE_PROBE_EVIDENCE?.trim();
+      if (localMode && priorProbePath) {
+        const priorProbe = JSON.parse(readFileSync(resolve(priorProbePath), "utf8")).liveWorkerProbe;
+        if (!priorProbe?.attempted) throw new Error("Prior live probe evidence does not contain an attempted probe");
+        evidence.liveWorkerProbe = { ...priorProbe, reusedFrom: resolve(priorProbePath) };
+        evidence.interactions.push({ check: "single live Worker probe recorded in prior smoke evidence", passed: true });
+      } else {
     evidence.liveWorkerProbe.attempted = true;
     evidence.liveWorkerProbe.request = { nationality: "Indian", from: "Georgia", destination: "Paris", purpose: "tourism", date: "2027-04-12" };
     evidence.liveWorkerProbe.commentsSent = false;
@@ -208,6 +209,9 @@ try {
       evidence.liveWorkerProbe.reason = reason;
       if (evidence.liveWorkerProbe.httpStatus && liveData?.type === "report" && typeof liveData.markdown === "string" && liveData.markdown.trim()) throw error;
     } finally { clearTimeout(liveTimer); }
+      }
+    } else {
+      evidence.liveWorkerProbe.outcome = "skipped (set AIFACTORY_LIVE_WORKER_PROBE=1 to opt in)";
     }
     save();
     await context.close();
