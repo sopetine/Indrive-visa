@@ -31,10 +31,126 @@ const report = {
 const actionReport = {
   ...report,
   critical: [
-    { label: "Confirm passport validity", value: "Six months remaining", type: "rule", source: "https://example.gov/passport" },
+    { label: "Confirm passport validity before starting the long official application process for your selected travel route", value: "Six months remaining", type: "rule", source: "https://example.gov/passport/" + "verification-details-".repeat(9) },
     { label: "Check transit rules", value: "Before booking", type: "rule", source: "https://example.gov/transit" },
   ],
 };
+
+test("checklist print is conditional, focused, one-shot, and preserves progress", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-11-11T12:00:00+04:00") });
+  await page.route("https://visa-advisor.sopetine.workers.dev/**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(actionReport) })
+  );
+  await page.addInitScript(() => {
+    window.__printModes = [];
+    window.print = () => window.__printModes.push(document.documentElement.getAttribute("data-checklist-print"));
+  });
+  await page.goto("/");
+  const disclaimer = page.getByRole("button", { name: "I understand" });
+  if (await disclaimer.isVisible()) await disclaimer.click();
+  await page.getByLabel(/Passport nationality/).fill("Canadian");
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await page.getByLabel(/Comments/).fill("PRIVATE NOTE: keep this out of the printed checklist");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+
+  const checklist = page.locator(".before-you-book");
+  const printChecklist = page.getByRole("button", { name: "Print checklist" });
+  await expect(checklist).toContainText("Before you book");
+  await expect(printChecklist).toBeVisible();
+  const checkboxes = page.locator(".critical-step-checkbox");
+  await checkboxes.first().check();
+  const flagsBefore = await checkboxes.evaluateAll((nodes) => nodes.map((node) => node.checked));
+  const progressBefore = await page.evaluate(() => localStorage.getItem("visa-advisor.checklist-progress.v1"));
+
+  await printChecklist.click();
+  await expect.poll(() => page.evaluate(() => window.__printModes.length)).toBe(1);
+  expect(await page.evaluate(() => window.__printModes[0])).toBe("true");
+  await page.emulateMedia({ media: "print" });
+  const printPresentation = await page.evaluate(() => ({
+    header: getComputedStyle(document.querySelector(".print-report-header")).visibility,
+    checklist: getComputedStyle(document.querySelector(".before-you-book")).display,
+    otherContent: [...document.querySelectorAll(".report-body > :not(.before-you-book)")].map((node) => getComputedStyle(node).display),
+    checkbox: getComputedStyle(document.querySelector(".critical-step-checkbox")).appearance,
+    linkDestinations: [...document.querySelectorAll(".critical-step-verify")].map((link) => ({
+      href: link.getAttribute("href"),
+      printed: getComputedStyle(link, "::after").content,
+    })),
+    privateComment: getComputedStyle(document.querySelector(".comments-textarea")).visibility,
+    privateCommentFormVisibility: getComputedStyle(document.querySelector(".comments-textarea").closest("form")).visibility,
+    privateCommentValue: document.querySelector(".comments-textarea").value,
+    layout: (() => {
+      const checklist = document.querySelector(".before-you-book");
+      const longLabel = document.querySelector(".critical-step-label");
+      const longLink = document.querySelector(".critical-step-verify");
+      return {
+        checklistScroll: checklist.scrollWidth,
+        checklistClient: checklist.clientWidth,
+        documentScroll: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+        documentClient: Math.min(document.documentElement.clientWidth, document.body.clientWidth),
+        labelWrap: getComputedStyle(longLabel).overflowWrap,
+        linkWrap: getComputedStyle(longLink).overflowWrap,
+        linkWhiteSpace: getComputedStyle(longLink).whiteSpace,
+      };
+    })(),
+  }));
+  expect(printPresentation.header).toBe("visible");
+  expect(printPresentation.checklist).toBe("block");
+  expect(printPresentation.otherContent.every((display) => display === "none")).toBe(true);
+  expect(printPresentation.checkbox).toBe("auto");
+  expect(printPresentation.linkDestinations).toHaveLength(2);
+  expect(printPresentation.linkDestinations[0].href).toBe(actionReport.critical[0].source);
+  expect(printPresentation.linkDestinations[0].printed).toContain(actionReport.critical[0].source);
+  expect(printPresentation.linkDestinations[1].href).toBe(actionReport.critical[1].source);
+  expect(printPresentation.linkDestinations[1].printed).toContain(actionReport.critical[1].source);
+  expect(printPresentation.privateComment).not.toBe("visible");
+  expect(printPresentation.privateCommentFormVisibility).not.toBe("visible");
+  expect(printPresentation.privateCommentValue).toContain("PRIVATE NOTE");
+  expect(printPresentation.layout.checklistScroll).toBeLessThanOrEqual(printPresentation.layout.checklistClient);
+  expect(printPresentation.layout.documentScroll).toBeLessThanOrEqual(printPresentation.layout.documentClient);
+  expect(printPresentation.layout.labelWrap).toMatch(/anywhere|break-word/);
+  expect(printPresentation.layout.linkWrap).toMatch(/anywhere|break-word/);
+  expect(printPresentation.layout.linkWhiteSpace).toBe("normal");
+  await expect(page.locator("[data-print-route]")).toContainText("Paris");
+  await expect(page.locator("[data-print-date]")).toHaveText("2026-11-11");
+  await expect(checklist).toContainText("1 of 2 complete");
+  await expect(checklist).toContainText(actionReport.critical[0].label);
+  await expect(checklist).toContainText("Six months remaining");
+  await expect(checklist).toContainText(actionReport.critical[1].label);
+  await expect(checklist).toContainText("Before booking");
+  await expect(checkboxes.nth(0)).toBeChecked();
+  await expect(checkboxes.nth(1)).not.toBeChecked();
+  expect(await checkboxes.evaluateAll((nodes) => nodes.map((node) => node.checked))).toEqual(flagsBefore);
+  expect(await page.evaluate(() => localStorage.getItem("visa-advisor.checklist-progress.v1"))).toBe(progressBefore);
+  await page.emulateMedia({ media: "screen" });
+  await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
+  await expect(page.locator("html")).not.toHaveAttribute("data-checklist-print");
+  expect(await checkboxes.evaluateAll((nodes) => nodes.map((node) => node.checked))).toEqual(flagsBefore);
+  expect(await page.evaluate(() => localStorage.getItem("visa-advisor.checklist-progress.v1"))).toBe(progressBefore);
+
+  await printChecklist.focus();
+  await page.keyboard.press("Space");
+  await expect.poll(() => page.evaluate(() => window.__printModes.length)).toBe(2);
+  expect(await page.evaluate(() => window.__printModes.length)).toBe(2);
+  expect(await page.evaluate(() => window.__printModes[1])).toBe("true");
+  await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
+  expect(await checkboxes.evaluateAll((nodes) => nodes.map((node) => node.checked))).toEqual(flagsBefore);
+  expect(await page.evaluate(() => localStorage.getItem("visa-advisor.checklist-progress.v1"))).toBe(progressBefore);
+});
+
+test("checklist print control is absent when the report has no booking actions", async ({ page }) => {
+  await page.route("https://visa-advisor.sopetine.workers.dev/**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(report) })
+  );
+  await page.goto("/");
+  const disclaimer = page.getByRole("button", { name: "I understand" });
+  if (await disclaimer.isVisible()) await disclaimer.click();
+  await page.getByLabel(/Passport nationality/).fill("Canadian");
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+  await expect(page.getByRole("button", { name: "Print checklist" })).toHaveCount(0);
+});
 
 test("preparation progress restores only for the same opaque report identity", async ({ page }) => {
   await page.route("https://visa-advisor.sopetine.workers.dev/**", async (route) => {
@@ -552,9 +668,16 @@ test("corrupted saved form data falls back to the form", async ({ page }) => {
 
 test("successful report has accessible print action and privacy-safe printable content", async ({ page }, testInfo) => {
   await page.clock.install({ time: new Date("2026-11-10T20:30:00Z") });
-  await page.addInitScript(() => { window.printCalls = 0; window.print = () => { window.printCalls += 1; }; });
+  await page.addInitScript(() => {
+    window.printCalls = 0;
+    window.printModes = [];
+    window.print = () => {
+      window.printCalls += 1;
+      window.printModes.push(document.documentElement.getAttribute("data-checklist-print"));
+    };
+  });
   await page.route("https://visa-advisor.sopetine.workers.dev/", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(report) })
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(actionReport) })
   );
   await page.goto("/");
   await page.getByRole("button", { name: "I understand" }).click();
@@ -571,8 +694,13 @@ test("successful report has accessible print action and privacy-safe printable c
   await expect(print).toBeFocused();
   await page.keyboard.press("Enter");
   await expect.poll(() => page.evaluate(() => window.printCalls)).toBe(1);
+  expect(await page.evaluate(() => window.printModes)).toEqual([null]);
   await page.emulateMedia({ media: "print" });
   await expect(page.locator("[data-print-header]")).toBeVisible();
+  await expect(page.locator(".before-you-book")).toBeVisible();
+  await expect(page.locator(".before-you-book")).toContainText(actionReport.critical[0].label);
+  await expect(page.locator(".before-you-book")).toContainText("Six months remaining");
+  await expect(page.locator(".before-you-book .critical-step-verify").first()).toHaveAttribute("href", actionReport.critical[0].source);
   await expect(page.getByRole("heading", { name: "Verified documents and next steps" })).toBeVisible();
   await expect(page.locator(".evidence-checklist")).toContainText("Supported");
   await expect(page.locator(".evidence-checklist")).toContainText("Live web research was unavailable");
@@ -583,7 +711,10 @@ test("successful report has accessible print action and privacy-safe printable c
   await expect(page.getByRole("heading", { name: "Required documents" })).toBeVisible();
   await expect(page.getByRole("alert")).toContainText("Live web research was unavailable");
   await expect(page.locator('[data-view="report"] a[href="https://example.gov/apply"]').first()).toHaveAttribute("href", "https://example.gov/apply");
+  await expect(page.locator(".before-you-book")).toContainText("Before you book");
+  await expect(page.locator(".evidence-checklist")).toContainText("Valid passport");
   await expect(page.locator("[data-report-body]")).not.toContainText("PRIVATE NOTE SHOULD NOT PRINT");
+  await expect(page.locator("[data-view=report]")).not.toContainText("PRIVATE NOTE SHOULD NOT PRINT");
   const wrapped = await page.locator('[data-view="report"] a[href="https://example.gov/apply"]').first().evaluate((el) => getComputedStyle(el, "::after").content);
   expect(wrapped).toContain("https://example.gov/apply");
   await expect(page.locator("[data-action-bar-progress]")).toBeHidden();

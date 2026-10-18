@@ -2037,4 +2037,50 @@
   [data-view="report"] .report-section, [data-view="report"] .report-doc-group,
   [data-view="report"] .report-critical-item { break-inside: avoid; page-break-inside: avoid; }
   [data-view="report"] .report-section-title, [data-view="report"] .report-doc-group-title { break-after: avoid; page-break-after: avoid; }
+
+  /* Checklist printing keeps the route/date header and the rendered action list only. */
+  html[data-checklist-print="true"] [data-view="report"] .report-body > :not(.before-you-book) {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  html[data-checklist-print="true"] [data-view="report"] .print-report-header,
+  html[data-checklist-print="true"] [data-view="report"] .before-you-book,
+  html[data-checklist-print="true"] [data-view="report"] .before-you-book * {
+    visibility: visible !important;
+  }
+  html[data-checklist-print="true"] [data-view="report"] .before-you-book {
+    display: block !important;
+    color: #111 !important;
+    background: #fff !important;
+    border-color: #777 !important;
+    box-shadow: none !important;
+  }
+  html[data-checklist-print="true"] [data-view="report"] .before-you-book-title,
+  html[data-checklist-print="true"] [data-view="report"] .before-you-book-progress,
+  html[data-checklist-print="true"] [data-view="report"] .critical-step-label,
+  html[data-checklist-print="true"] [data-view="report"] .critical-step-value {
+    color: #111 !important;
+  }
+  html[data-checklist-print="true"] [data-view="report"] .critical-step {
+    color: #111 !important;
+    background: #fff !important;
+    border-color: #777 !important;
+    box-shadow: none !important;
+    overflow-wrap: anywhere;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  html[data-checklist-print="true"] [data-view="report"] .critical-step-checkbox {
+    appearance: auto;
+    accent-color: #111 !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  html[data-checklist-print="true"] [data-view="report"] .critical-step-action,
+  html[data-checklist-print="true"] [data-view="report"] .critical-step-verify {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+    min-width: 0;
+  }
 }

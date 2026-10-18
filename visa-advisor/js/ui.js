@@ -1283,11 +1283,31 @@ function renderBeforeYouBook(critical, sections, annotations, flags = [], report
       Before you book
     </h2>
     <p class="before-you-book-progress" aria-live="polite" aria-atomic="true">${flags.filter(Boolean).length} of ${critical.length} complete</p>
+    ${critical.length ? '<button class="before-you-book-print" type="button">Print checklist</button>' : ""}
     <button class="before-you-book-reset" type="button">Reset progress</button>
     <ul class="before-you-book-list">${items}</ul>
   `;
   const progress = wrap.querySelector(".before-you-book-progress");
   const checkboxes = [...wrap.querySelectorAll(".critical-step-checkbox")];
+  const printChecklist = wrap.querySelector(".before-you-book-print");
+  if (printChecklist) {
+    const clearChecklistPrintMode = () => {
+      document.documentElement.removeAttribute("data-checklist-print");
+      window.removeEventListener("afterprint", clearChecklistPrintMode);
+    };
+    printChecklist.addEventListener("click", () => {
+      if (typeof window.print !== "function") return;
+      clearChecklistPrintMode();
+      document.documentElement.setAttribute("data-checklist-print", "true");
+      window.addEventListener("afterprint", clearChecklistPrintMode, { once: true });
+      try {
+        window.print();
+      } catch (error) {
+        clearChecklistPrintMode();
+        throw error;
+      }
+    });
+  }
   wrap.querySelector(".before-you-book-reset").addEventListener("click", () => {
     checkboxes.forEach((checkbox) => { checkbox.checked = false; });
     progress.textContent = `0 of ${critical.length} complete`;
