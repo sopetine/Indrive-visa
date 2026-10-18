@@ -45,27 +45,21 @@ test("client and Worker use the same versioned advisor prompt", () => {
   assert.match(mainSource, /formApi\.clearForm\(\)/);
 });
 
-function reportResponse(sources = []) {
+function reportResponse(sources = [], fields = {}) {
   const fence = String.fromCharCode(96).repeat(3);
   return Response.json({
-    output: [{
-      type: "message",
-      content: [{
-        type: "output_text",
-        text: fence + "json\n" + JSON.stringify({
+    choices: [{ message: { content: fence + "json\n" + JSON.stringify({
           markdown: "### Visa status\nVisa-free",
           sources,
-        }) + "\n" + fence,
-        annotations: [],
-      }],
-    }],
+          ...fields,
+        }) + "\n" + fence } }],
   });
 }
 
 const env = {
   LLM_API_KEY: "test-key",
-  LLM_ENDPOINT: "https://llm.test/v1/responses",
-  LLM_MODEL: "test-model",
+  LLM_ENDPOINT: "https://opencode.ai/zen/go/v1/chat/completions",
+  LLM_MODEL: "deepseek-v4.1-flash",
   VISA_ADVISOR_LIMITER: { limit: async () => ({ success: true }) },
 };
 
@@ -82,42 +76,63 @@ test("missing destination is rejected before any agent call", async () => {
   assert.equal(called, false);
 });
 
-test("unsupported live-search tooling is clearly marked as unverified", async () => {
-  let calls = 0;
-  globalThis.fetch = async () => {
-    calls += 1;
-    if (calls === 1) return new Response("web_search tool is unsupported", { status: 400 });
-    return reportResponse();
-  };
-
-  const response = await worker.fetch(request(), env);
-  const result = await response.json();
-  assert.equal(response.status, 200);
-  assert.equal(calls, 2);
-  assert.match(result.researchWarning, /live web research was unavailable/i);
-  assert.equal(result.checklist.status, "unavailable");
-  assert.match(result.checklist.message, /No checklist items could be verified/i);
-});
-
-test("checklist includes only citation-backed documents and preserves source warnings", async () => {
-  let calls = 0;
-  const body = "```json\n" + JSON.stringify({ markdown: "### Visa status\nVisa-free\n\n### Required documents\n- Required: Valid passport\n- Required: Uncited invitation letter", sources: [{ title: "Authority", url: "https://travel.example.org/visa", domain: "travel.example.org" }] }) + "\n```";
-  const start = body.indexOf("Required: Valid passport");
-  globalThis.fetch = async () => {
-    calls += 1;
-    return Response.json({
-      output: [{ type: "message", content: [{ type: "output_text",
-        text: body,
-        annotations: [{ type: "url_citation", title: "Travel authority", url: "https://travel.example.org/passport", start_index: start, end_index: start + "Required: Valid passport".length }],
-      }] }],
+test("uses OpenCode chat completions request, required headers, and normalized contract", async () => {
+  let upstreamUrl;
+  let upstreamInit;
+  let firstUserMessage;
+  globalThis.fetch = async (url, init) => {
+    upstreamUrl = String(url);
+    upstreamInit = init;
+    firstUserMessage ??= JSON.parse(init.body).messages[1].content;
+    return reportResponse([], {
+      caveats: "Confirm with the destination authority before travel.",
+      critical: [{ label: "Maximum stay", value: "90 days", source: "https://travel.example.org/visa", type: "deadline" }],
     });
   };
+  const response = await worker.fetch(request(), env);
+  const result = await response.json();
+  const sent = JSON.parse(upstreamInit.body);
+  assert.equal(upstreamUrl, "https://opencode.ai/zen/go/v1/chat/completions");
+  assert.equal(sent.model, "deepseek-v4.1-flash");
+  assert.deepEqual(sent.messages.map(({ role }) => role), ["system", "user"]);
+  assert.equal(sent.messages[0].content, systemPrompt);
+  assert.equal(firstUserMessage, [
+    "Nationality: Russian",
+    "From:         Georgia",
+    "Destination:  Paris",
+    "Date:         2026-11-10",
+    "Purpose:      business",
+    "Trip intent:  entering the destination country (default)",
+  ].join("\n"));
+  assert.equal(upstreamInit.headers["Content-Type"], "application/json");
+  assert.equal(upstreamInit.headers.Authorization, "Bearer test-key");
+  assert.match(upstreamInit.headers["User-Agent"], /VisaAdvisor/);
+  assert.match(upstreamInit.headers["x-opencode-session"], /^[0-9a-f-]{36}$/i);
+  assert.equal(result.type, "report");
+  assert.equal(result.markdown, "### Visa status\nVisa-free");
+  assert.equal(result.sourcesReturned, 0);
+  assert.equal(result.caveats, "Confirm with the destination authority before travel.");
+  assert.deepEqual(result.critical, [{ label: "Maximum stay", value: "90 days", source: "https://travel.example.org/visa", type: "deadline" }]);
+  assert.equal(result.checklist.status, "unavailable");
+  assert.deepEqual(result.checklist.items, []);
+  assert.equal(JSON.stringify(result).includes("test-key"), false);
+});
+
+test("chat-completions report keeps Tavily sources in the website contract", async () => {
+  globalThis.fetch = async (url) => String(url).includes("api.tavily.com/search")
+    ? Response.json({ results: [{ title: "Travel authority", url: "https://travel.example.org/visa", content: "Valid passport required" }] })
+    : Response.json({ choices: [{ message: { content: "```json\n" + JSON.stringify({ markdown: "### Visa status\nVisa-free", sources: [] }) + "\n```" } }] });
+  const result = await (await worker.fetch(request(), { ...env, SEARCH_PROVIDER: "tavily", TAVILY_API_KEY: "test-search", SEARCH_QUERIES_PER_RUN: "1" })).json();
+  assert.equal(result.type, "report");
+  assert.equal(result.sources[0].url, "https://travel.example.org/visa");
+  assert.equal(result.serverSearchAvailable, true);
+  assert.ok(Array.isArray(result.checklist.items));
+});
+
+test("chat-completions clarification retains the clarification contract", async () => {
+  globalThis.fetch = async () => Response.json({ choices: [{ message: { content: "```json\n" + JSON.stringify({ type: "clarify", question: "Which passport do you hold?" }) + "\n```" } }] });
   const result = await (await worker.fetch(request(), env)).json();
-  assert.equal(result.checklist.items[0].status, "supported");
-  assert.equal(result.checklist.items[0].sources[0].url, "https://travel.example.org/passport");
-  assert.equal(result.checklist.items[1].status, "unknown");
-  assert.equal(result.checklist.status, "available");
-  assert.match(result.checklist.items[0].warnings.join(" "), /No recognized official/i);
+  assert.deepEqual(result, { type: "clarify", question: "Which passport do you hold?" });
 });
 
 test("streaming clients receive ordered query, result, and final SSE events", async () => {
@@ -169,7 +184,7 @@ test("transit intent reaches research instructions and triggers transit-specific
     ...env, SEARCH_PROVIDER: "tavily", TAVILY_API_KEY: "test-key", SEARCH_QUERIES_PER_RUN: "10",
   });
   assert.equal(response.status, 200);
-  assert.match(upstreamBody.input[0].content, /airport transit; traveler plans to remain airside/);
+  assert.match(upstreamBody.messages[1].content, /airport transit; traveler plans to remain airside/);
   assert.ok(queries.some((query) => /airside transit visa requirements/i.test(query)));
 });
 
@@ -178,7 +193,7 @@ test("missing intent keeps entry behavior and invalid intent is rejected", async
   globalThis.fetch = async (_url, init) => { upstreamBody = JSON.parse(init.body); return reportResponse(); };
   const response = await worker.fetch(request(), env);
   assert.equal(response.status, 200);
-  assert.match(upstreamBody.input[0].content, /entering the destination country \(default\)/);
+  assert.match(upstreamBody.messages[1].content, /entering the destination country \(default\)/);
   const invalid = await worker.fetch(request({ tripIntent: "maybe" }), env);
   assert.equal(invalid.status, 400);
 });
@@ -218,8 +233,10 @@ test("caller cannot replace the server-approved advisor prompt", async () => {
 
 test("model cannot make an untrusted URL look like an official authority", async () => {
   let calls = 0;
-  globalThis.fetch = async () => {
+  const sessions = [];
+  globalThis.fetch = async (_url, init) => {
     calls += 1;
+    sessions.push(init.headers["x-opencode-session"]);
     return reportResponse([{ title: "Fake authority", url: "https://attacker.example/visa", domain: "gov.uk" }]);
   };
 
@@ -227,6 +244,7 @@ test("model cannot make an untrusted URL look like an official authority", async
   const result = await response.json();
   assert.equal(response.status, 200);
   assert.equal(calls, 2, "untrusted URL should trigger the official-source retry");
+  assert.equal(sessions[0], sessions[1], "a request retry must reuse its OpenCode session id");
   assert.match(result.researchWarning, /no recognized official/i);
 });
 
@@ -293,10 +311,48 @@ test("stalled provider calls time out instead of hanging the Worker", async () =
   try {
     const response = await worker.fetch(request(), env);
     assert.equal(response.status, 504);
-    assert.match((await response.json()).error, /timed out/i);
+    const result = await response.json();
+    assert.match(result.error, /timed out/i);
+    assert.equal(JSON.stringify(result).includes(env.LLM_API_KEY), false);
   } finally {
     globalThis.setTimeout = originalTimeout;
   }
+});
+
+test("network failures map to 502 without exposing the API key in errors or logs", async () => {
+  const logged = [];
+  const originalError = console.error;
+  console.error = (...args) => logged.push(args.map(String).join(" "));
+  globalThis.fetch = async () => { throw new Error(`connection failed with ${env.LLM_API_KEY}`); };
+  try {
+    const response = await worker.fetch(request(), env);
+    const result = await response.json();
+    assert.equal(response.status, 502);
+    assert.match(result.error, /request failed/i);
+    assert.equal(JSON.stringify(result).includes(env.LLM_API_KEY), false);
+    assert.equal(logged.join(" ").includes(env.LLM_API_KEY), false);
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test("rejected upstream responses map to 502 and include status without exposing the API key", async () => {
+  globalThis.fetch = async () => new Response("Rate limited", { status: 429 });
+  const response = await worker.fetch(request(), env);
+  const result = await response.json();
+  assert.equal(response.status, 502);
+  assert.equal(result.status, 429);
+  assert.match(result.error, /rejected/i);
+  assert.equal(JSON.stringify(result).includes(env.LLM_API_KEY), false);
+});
+
+test("malformed upstream JSON maps to 502 without exposing the API key", async () => {
+  globalThis.fetch = async () => new Response(`not-json ${env.LLM_API_KEY}`, { status: 200 });
+  const response = await worker.fetch(request(), env);
+  const result = await response.json();
+  assert.equal(response.status, 502);
+  assert.match(result.error, /non-json/i);
+  assert.equal(JSON.stringify(result).includes(env.LLM_API_KEY), false);
 });
 
 test("client cancellation aborts the active provider request", async () => {

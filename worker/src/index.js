@@ -2,8 +2,7 @@
    Visa Advisor proxy — Cloudflare Worker
    Hides the LLM API key, accepts the system prompt from the
    browser (fetched from /visa-advisor-prompt.md), forwards the
-   query to the LLM via the OpenAI Responses API (with the
-   server-side `web_search` tool), and returns the contract shape
+   query to the LLM via OpenCode Go chat completions, and returns the contract shape
    expected by js/ui.js → renderReport():
 
        { type: "report",
@@ -32,8 +31,8 @@
    Env vars (set via `wrangler secret put`):
      LLM_API_KEY  — bearer token for the LLM provider
    Vars (set in wrangler.toml [vars]):
-     LLM_ENDPOINT — full chat-completions URL (must be /v1/responses for web_search)
-     LLM_MODEL    — model id (e.g. "MiniMax-M3")
+     LLM_ENDPOINT — OpenCode Go chat-completions URL
+     LLM_MODEL    — model id (e.g. "deepseek-v4.1-flash")
      ALLOWED_ORIGIN — exact origin allowed via CORS
    ============================================================ */
 
@@ -160,52 +159,23 @@ export default {
       }
     }
 
-    // v0.5 prompt uses server-side web_search via the Responses API.
-    // max_tokens must cover thinking + a citation-heavy visible response
-    // (typically ~1500 thinking + ~6500 visible with annotations) PLUS
-    // the new searchQueries[] + sources[] envelope fields.
-    const requestBody = (withWebSearch, msg) => ({
+    const sessionId = crypto.randomUUID();
+    const requestBody = (msg) => ({
       model:    env.LLM_MODEL,
-      ...(withWebSearch ? { tools: [{ type: "web_search" }] } : {}),
       max_tokens: 8192,
-      instructions: systemPrompt,
-      input: [
+      messages: [
+        { role: "system", content: systemPrompt },
         { role: "user", content: msg },
       ],
     });
 
-    // First attempt with web_search.
     let upstream;
-    try { upstream = await callUpstream(env, requestBody(true, userMessage), upstreamController.signal); }
+    try { upstream = await callUpstream(env, requestBody(userMessage), upstreamController.signal, sessionId); }
     catch (error) {
       clearTimeout(upstreamTimer);
       request.signal.removeEventListener("abort", abortUpstream);
       return json({ error: upstreamController.signal.aborted ? "Upstream request timed out" : "Upstream request failed" }, upstreamController.signal.aborted ? 504 : 502, origin);
     }
-    let webSearchAvailable = true;
-
-    // If the provider rejected the web_search tool key (4xx), retry once
-    // without it. The LLM still runs the prompt; output is unchanged in
-    // shape but lacks real-time web grounding → annotations will be empty
-    // and the UI shows its unverified-source banner.
-    if (upstream.status === 400 || upstream.status === 422) {
-      const detail = await upstream.text().catch(() => "");
-      if (/web_search|tool/i.test(detail)) {
-        webSearchAvailable = false;
-        try { upstream = await callUpstream(env, requestBody(false, userMessage), upstreamController.signal); }
-        catch {
-          clearTimeout(upstreamTimer);request.signal.removeEventListener("abort", abortUpstream);
-          return json({ error: "Upstream request timed out" }, 504, origin);
-        }
-      } else {
-        return json(
-          { error: "Upstream rejected request", status: 400, detail: detail.slice(0, 500) },
-          400,
-          origin,
-        );
-      }
-    }
-
     if (!upstream.ok) {
       const detail = await upstream.text().catch(() => "");
       clearTimeout(upstreamTimer);request.signal.removeEventListener("abort", abortUpstream);
@@ -232,7 +202,6 @@ export default {
       isVerifiedOfficialSource(source)
     );
     if (
-      webSearchAvailable &&
       parsed.type === "report" &&
       !hasOfficialSource
     ) {
@@ -247,7 +216,7 @@ export default {
         `full response contract.`;
       const retryMsg = userMessage + reminder;
       let retryUpstream;
-      try { retryUpstream = await callUpstream(env, requestBody(true, retryMsg), upstreamController.signal); }
+      try { retryUpstream = await callUpstream(env, requestBody(retryMsg), upstreamController.signal, sessionId); }
       catch { retryUpstream = null; }
       if (retryUpstream?.ok) {
         try {
@@ -268,13 +237,6 @@ export default {
       parsed.researchWarning =
         `No recognized official destination-government or consular source domain was found. ` +
         `Treat the requirements as unverified and confirm them with the destination authority before booking.`;
-    }
-    if (parsed.type === "report" && !webSearchAvailable) {
-      const warning =
-        `Live web research was unavailable. Treat this result as unverified and confirm every requirement with the destination authority before booking.`;
-      parsed.researchWarning = parsed.researchWarning
-        ? `${warning} ${parsed.researchWarning}`
-        : warning;
     }
     if (parsed.type === "report" && parsed.checklist) {
       parsed.checklist.warnings = parsed.researchWarning ? [parsed.researchWarning] : [];
@@ -298,12 +260,14 @@ async function isApprovedPrompt(prompt) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("") === SYSTEM_PROMPT_SHA256;
 }
 
-async function callUpstream(env, body, signal) {
+async function callUpstream(env, body, signal, sessionId) {
   return fetch(env.LLM_ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type":  "application/json",
       "Authorization": `Bearer ${env.LLM_API_KEY}`,
+      "User-Agent": "VisaAdvisor/1.0 (https://sopetine.github.io/Indrive-visa/)",
+      "x-opencode-session": sessionId,
     },
     body: JSON.stringify(body),
     signal,
@@ -473,55 +437,16 @@ function formatEvidenceBlock(results, charCap = 14_000) {
   return lines.join("\n");
 }
 
-/* The Responses API may put the assistant message inside `output[]`
-   (preferred) or at `output_text` (top-level convenience field). Walk
-   every message block and concatenate the text parts. Pull every
-   url_citation annotation as we go — these are the per-claim
-   provenance the UI uses to append per-bullet verify links. */
-function extractFromResponses(data) {
-  let text = "";
-  const annotations = [];
-  const searchCalls = [];
-
-  for (const block of data.output || []) {
-    if (!block || typeof block !== "object") continue;
-
-    if (block.type === "web_search_call" && block.action) {
-      searchCalls.push({
-        query: block.action.query || "",
-        status: block.status || "completed",
-      });
-      continue;
-    }
-
-    if (block.type !== "message") continue;
-    for (const part of block.content || []) {
-      if (!part || part.type !== "output_text") continue;
-      text += part.text || "";
-      for (const a of part.annotations || []) {
-        if (!a || a.type !== "url_citation") continue;
-        annotations.push({
-          title:   typeof a.title === "string" ? a.title : "",
-          url:     typeof a.url   === "string" ? a.url   : "",
-          start:   Number.isInteger(a.start_index) ? a.start_index : -1,
-          end:     Number.isInteger(a.end_index)   ? a.end_index   : -1,
-          snippet: typeof a.content === "string" ? a.content : "",
-        });
-      }
-    }
-  }
-
-  // Fallback if output_text is top-level and we didn't find it above.
-  if (!text && typeof data.output_text === "string") text = data.output_text;
-
-  return { text, annotations, searchCalls };
+function extractFromChatCompletions(data) {
+  const content = data?.choices?.[0]?.message?.content;
+  return { text: typeof content === "string" ? content : "", annotations: [], searchCalls: [] };
 }
 
 /* The prompt still asks for a ```json fence around the structured
    answer. If the LLM emitted one, parse it; otherwise treat the whole
    response as the markdown body. */
 function parseContract(data, serverSources = [], tavilyResults = []) {
-  const { text, annotations, searchCalls } = extractFromResponses(data);
+  const { text, annotations, searchCalls } = extractFromChatCompletions(data);
 
   // Ground-truth sources derivable regardless of whether the JSON envelope
   // below parses cleanly — shared by the salvage and full-fallback paths.
