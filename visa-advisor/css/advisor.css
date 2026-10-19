@@ -2045,6 +2045,11 @@ body.theme-dark .action-bar-progress-step { color: #f5f5ec; }
 .status-badge .hl-sm { color: inherit; background: rgb(255 255 255 / 55%); }
 .status-stay-label { color: var(--color-muted); }
 .status-stay-value { color: var(--color-ink); }
+@media (max-width: 700px) {
+  .report-status { align-items: stretch; flex-direction: column; }
+  .status-badge { width: 100%; }
+  .status-stay { text-align: left; }
+}
 .report-section { padding: clamp(20px, 3vw, 30px); }
 .report-section-title {
   min-width: 0;
