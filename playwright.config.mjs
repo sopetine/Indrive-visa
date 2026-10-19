@@ -23,6 +23,9 @@ export default defineConfig({
     command: `python3 -m http.server ${port} --directory visa-advisor --bind 127.0.0.1`,
     url: testServerUrl,
     reuseExistingServer: false,
+    // The static server logs every request; keep test output to results only.
+    stdout: "ignore",
+    stderr: "ignore",
     timeout: 15_000,
   },
 });
