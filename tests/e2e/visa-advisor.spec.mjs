@@ -919,6 +919,27 @@ test("research error retry and clarification remain operable across themes and w
   await expect(page.getByText("Visa-free", { exact: true }).first()).toBeVisible();
 });
 
+test("malformed model tool-call output is shown as a retryable error, never as report content", async ({ page }) => {
+  const malformed = "<｜｜DSML｜｜ calls>\n<｜｜DSML｜｜ invoke name=\"web_search\">";
+  await page.route("https://visa-advisor.sopetine.workers.dev/", (route) => route.fulfill({
+    status: 502,
+    contentType: "application/json",
+    body: JSON.stringify({ error: "The AI provider returned an unrecognized response format. Please try again." }),
+  }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "I understand" }).click();
+  await page.getByLabel(/Passport nationality/).fill("Russian");
+  await page.getByLabel(/Based in/).fill("Monaco");
+  await page.getByLabel(/Destination city/).fill("Ukraine");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+
+  const error = page.locator("[data-report-error]");
+  await expect(error).toBeVisible();
+  await expect(error).toContainText(/try again/i);
+  await expect(page.locator("[data-view=report]")).not.toContainText("Report format unrecognized");
+  await expect(page.locator("[data-view=report]")).not.toContainText(malformed);
+});
+
 test("the form remains usable on a narrow screen", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");

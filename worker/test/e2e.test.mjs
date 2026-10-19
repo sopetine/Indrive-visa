@@ -118,6 +118,23 @@ test("uses OpenCode chat completions request, required headers, and normalized c
   assert.equal(JSON.stringify(result).includes("test-key"), false);
 });
 
+test("malformed DSML tool-call text is rejected instead of returned as a report", async () => {
+  const malformed = [
+    "<｜｜DSML｜｜ calls>",
+    '<｜｜DSML｜｜ invoke name="web_search">',
+    '<｜｜DSML｜｜ parameter name="query" string="true">Ukraine visa requirements',
+    "<\/｜｜DSML｜｜ calls>",
+  ].join("\n");
+  globalThis.fetch = async () => Response.json({ choices: [{ message: { content: malformed } }] });
+
+  const response = await worker.fetch(request(), env);
+  const result = await response.json();
+  assert.equal(response.status, 502);
+  assert.equal(result.type, undefined);
+  assert.match(result.error, /unrecognized response format/i);
+  assert.equal(JSON.stringify(result).includes("DSML"), false);
+});
+
 test("chat-completions report keeps Tavily sources in the website contract", async () => {
   globalThis.fetch = async (url) => String(url).includes("api.tavily.com/search")
     ? Response.json({ results: [{ title: "Travel authority", url: "https://travel.example.org/visa", content: "Valid passport required" }] })
