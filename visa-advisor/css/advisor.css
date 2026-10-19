@@ -2061,6 +2061,8 @@ body.theme-dark .action-bar-progress-step { color: #f5f5ec; }
   text-transform: none;
 }
 .report-section-value { color: var(--color-ink); line-height: 1.5; overflow-wrap: anywhere; }
+/* The lime CTA keeps dark text in every theme; the rule above must not lighten it in dark mode. */
+.report-section-value.report-section-value--cta { color: var(--color-ink-on-lime); }
 .report-bullet { min-width: 0; padding: 12px 14px; border-bottom: 1px solid var(--color-line); border-radius: 0; }
 .report-bullet:last-child { border-bottom: 0; }
 .report-bullet::before { background: var(--color-ink); }

@@ -44,7 +44,8 @@ mark.hl, .hl {
    <mark class="hl-sm">Schengen</mark>, <mark class="hl-sm">~90 EUR</mark>. */
 mark.hl-sm, .hl-sm {
   background: var(--light-green);
-  color: var(--main-dark);
+  /* The pale lime surface stays light in every theme, so its text stays ink-dark. */
+  color: var(--color-ink-on-lime);
   padding: 0 0.1em;
   border-radius: 2px;
   font: inherit;
