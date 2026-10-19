@@ -103,6 +103,48 @@ test("advisor form validation is accessible and clears as required fields are ed
   expect(submitted[0].comments || "").toBe("");
 });
 
+test("report verdict stays readable beside a long allowed stay at responsive widths", async ({ page }, testInfo) => {
+  const longStay = "90 days within any 180-day period, across all Schengen member states, counted cumulatively, subject to local entry conditions and border-officer review.";
+  const narrowReport = {
+    ...report,
+    markdown: `### Visa status\nEmbassy / consulate visa required\n\n### Allowed stay\n${longStay}\n\n### Required documents\n- Valid passport`,
+  };
+  await page.addInitScript(() => localStorage.setItem("visa-advisor.disclaimer", "v1"));
+  await page.route("https://visa-advisor.sopetine.workers.dev/**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(narrowReport) })
+  );
+  await page.goto("/");
+  await page.getByLabel(/Passport nationality/).fill("Canadian");
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+  const badge = page.locator(".status-badge");
+  await expect(badge).toContainText("Embassy / consulate visa required");
+
+  for (const width of [601, 390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(badge).toBeVisible();
+    const layout = await page.evaluate(() => {
+      const badge = document.querySelector(".status-badge");
+      const text = badge.lastElementChild;
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const rects = [...range.getClientRects()];
+      return {
+        documentWidth: document.documentElement.scrollWidth,
+        viewportWidth: document.documentElement.clientWidth,
+        badgeWidth: badge.getBoundingClientRect().width,
+        verdictWidth: text.getBoundingClientRect().width,
+        lineCount: rects.length,
+      };
+    });
+    expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
+    expect(layout.verdictWidth).toBeGreaterThan(width === 601 ? 120 : 40);
+    expect(layout.lineCount).toBeGreaterThan(0);
+    await page.screenshot({ path: testInfo.outputPath(`report-${width}.png`), fullPage: true });
+  }
+});
+
 test("form introduction is a responsive hero labelled by its accessible heading", async ({ page }) => {
   await page.goto("/");
   const formView = page.locator('[data-view="form"]');
