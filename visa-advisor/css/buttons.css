@@ -32,15 +32,30 @@
 
 /* Primary (lime-green fill, dark text) — matches inDrive header CTA */
 .btn--primary {
-  background: var(--main-green);
-  color: var(--main-dark);
-  border: 2px solid var(--main-green);
+  min-height: 49px;
+  background: var(--color-ink);
+  color: #fff;
+  border: 2px solid var(--color-ink);
+  border-radius: 14px;
+  font-weight: 600;
+}
+body.theme-dark .btn--primary { color: var(--color-bg); }
+body.theme-dark .btn--primary:hover { color: #fff; }
+@media (prefers-color-scheme: dark) {
+  :root:not(.theme-light):not(.theme-dark):not(:has(body.theme-light, body.theme-dark)) .btn--primary {
+    color: var(--color-bg);
+  }
+  :root:not(.theme-light):not(.theme-dark):not(:has(body.theme-light, body.theme-dark)) .btn--primary:hover {
+    color: #fff;
+  }
 }
 .btn--primary:hover {
-  background: var(--main-green-hover);
-  border-color: var(--main-green-hover);
-  box-shadow: 0 6px 18px rgba(193, 241, 29, 0.4);
+  background: #30332a;
+  border-color: #30332a;
+  color: #fff;
+  box-shadow: none;
 }
+.btn--primary:active { transform: scale(0.98); }
 
 /* Secondary (dark fill, white text) — matches inDrive "Get the App" hero CTA */
 .btn--secondary {

@@ -2,16 +2,20 @@
    BASE — typography, body, container, section header
    ============================================================ */
 
-body { font-family: var(--font-family-body); }
+body {
+  font-family: var(--font-family-body);
+  font-size: clamp(14px, 1rem, 16px);
+  line-height: 1.375;
+}
 
-/* Heading scale (fluid via clamp) */
-h1 { font-size: clamp(var(--fs-xxl), 5vw, var(--fs-5xl)); line-height: 1.05; }
-h2 { font-size: clamp(var(--fs-xl), 4vw, var(--fs-4xl)); line-height: 1.1; }
-h3 { font-size: clamp(var(--fs-l), 3vw, var(--fs-xxl)); line-height: 1.15; }
-h4 { font-size: var(--fs-m); line-height: var(--lh-m); }
+/* Compact display typography; h1 is sized for hero use. */
+h1 { font-size: clamp(42px, 8vw, 112px); letter-spacing: -0.06em; line-height: 0.94; }
+h2 { font-size: clamp(var(--fs-xl), 4vw, var(--fs-4xl)); line-height: 1.04; }
+h3 { font-size: clamp(var(--fs-l), 3vw, var(--fs-xxl)); line-height: 1.04; }
+h4 { font-size: var(--fs-m); line-height: 1.04; }
 
 @media (min-width: 768px) {
-  h1 { font-size: clamp(var(--fs-xxxl), 5vw, var(--fs-5xl)); }
+  h1 { font-size: clamp(42px, 8vw, 112px); }
   h2 { font-size: clamp(var(--fs-xxl), 4.5vw, var(--fs-4xl)); }
 }
 
