@@ -162,7 +162,10 @@ export default {
     const sessionId = crypto.randomUUID();
     const requestBody = (msg) => ({
       model:    env.LLM_MODEL,
-      max_tokens: 8192,
+      // deepseek-v4.1-flash reasons before answering; 8192 tokens were spent entirely on reasoning,
+      // leaving an empty report. Low effort keeps a full report well inside the 100 s upstream limit.
+      max_tokens: 32768,
+      reasoning_effort: "low",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: msg },
@@ -195,6 +198,11 @@ export default {
     }
 
     let parsed = parseContract(data, serverSearchSources, tavilyRawResults);
+    if (parsed.type === "report" && !String(parsed.markdown || "").trim()) {
+      clearTimeout(upstreamTimer);request.signal.removeEventListener("abort", abortUpstream);
+      const finish = data?.choices?.[0]?.finish_reason || "unknown";
+      return json({ error: `The AI provider returned no answer (finish_reason: ${finish}). Please try again.` }, 502, origin);
+    }
 
     // Research quality is measured by whether an official authority source
     // supports the report, not by a padded count of unrelated URLs.

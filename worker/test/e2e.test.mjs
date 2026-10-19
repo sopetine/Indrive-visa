@@ -374,3 +374,18 @@ test("client cancellation aborts the active provider request", async () => {
   assert.equal(response.status, 504);
   assert.equal(upstreamAborted, true);
 });
+
+test("reasoning budget is large enough and an empty answer is an error, not a blank report", async () => {
+  let upstreamBody;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("api.tavily.com/search")) return Response.json({ results: [] });
+    upstreamBody = JSON.parse(init.body);
+    // deepseek-v4.1-flash spent its whole budget reasoning and wrote no answer.
+    return Response.json({ choices: [{ finish_reason: "length", message: { content: "", reasoning_content: "thinking…" } }] });
+  };
+  const response = await worker.fetch(request(), { ...env, SEARCH_PROVIDER: "tavily", TAVILY_API_KEY: "test-search", SEARCH_QUERIES_PER_RUN: "1" });
+  assert.ok(upstreamBody.max_tokens >= 32768);
+  assert.equal(upstreamBody.reasoning_effort, "low");
+  assert.equal(response.status, 502);
+  assert.match((await response.json()).error, /no answer \(finish_reason: length\)/);
+});
