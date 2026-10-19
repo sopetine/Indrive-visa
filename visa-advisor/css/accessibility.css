@@ -18,22 +18,17 @@
 }
 .skip-link:focus { top: 0; }
 
-/* 2. Visible focus ring (the original has none) */
-*:focus-visible {
-  outline: 3px solid var(--main-green);
-  outline-offset: 2px;
-}
-button:focus-visible,
-a:focus-visible {
-  outline-color: var(--main-green);
+/* One theme-aware keyboard indicator shared by native and custom controls. */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 4px;
 }
 
 /* 3. Reduced motion — entire page has 0.3s/0.6s transitions */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation: none !important;
+    transition: none !important;
     scroll-behavior: auto !important;
   }
 }
@@ -183,7 +178,7 @@ a:focus-visible {
 
 /* 9. Focus-within helper for grouped elements */
 .focus-within-ring:focus-within {
-  outline: 3px solid var(--main-green);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-focus);
+  outline-offset: 4px;
   border-radius: var(--r-2);
 }

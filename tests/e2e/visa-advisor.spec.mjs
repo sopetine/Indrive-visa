@@ -36,6 +36,225 @@ const actionReport = {
   ],
 };
 
+test("advisor form validation is accessible and clears as required fields are edited", async ({ page }) => {
+  const submitted = [];
+  await page.route("https://visa-advisor.sopetine.workers.dev/", async (route) => {
+    submitted.push(route.request().postDataJSON());
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(report) });
+  });
+  await page.goto("/");
+  const disclaimer = page.getByRole("button", { name: "I understand" });
+  if (await disclaimer.isVisible().catch(() => false)) await disclaimer.click();
+
+  const submit = page.getByRole("button", { name: /Check requirements/ });
+  await expect(submit).toBeDisabled();
+  await page.locator("[data-form]").evaluate((form) => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  for (const [id, error] of [
+    ["input-nationality", "Enter your nationality"],
+    ["input-from", "Enter where you're based"],
+    ["input-destination", "Enter a destination city"],
+  ]) {
+    const control = page.locator(`#${id}`);
+    await expect(control).toHaveAttribute("aria-invalid", "true");
+    const describedBy = await control.getAttribute("aria-describedby");
+    expect(describedBy).toContain(`field-error-${id.replace("input-", "")}`);
+    await expect(page.locator(`#field-error-${id.replace("input-", "")}`)).toHaveText(error);
+    const label = page.locator(`label[for="${id}"]`);
+    await expect(label).toHaveCount(1);
+  }
+  await expect(submit).toBeDisabled();
+  await page.getByLabel(/Passport nationality/).fill("Canadian");
+  await expect(page.locator("#input-nationality")).not.toHaveAttribute("aria-invalid");
+  await expect(page.locator("#nationality-hint")).toBeVisible();
+  await expect(page.locator("#field-error-nationality")).toBeHidden();
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await expect(submit).toBeEnabled();
+
+  for (const [width, height] of [[1440, 900], [900, 720], [600, 720], [390, 680]]) {
+    await page.setViewportSize({ width, height });
+    const layout = await page.evaluate(() => ({
+      viewport: innerWidth,
+      document: document.documentElement.scrollWidth,
+      rowColumns: getComputedStyle(document.querySelector("[data-field-row]")).gridTemplateColumns,
+      formVisible: document.querySelector("[data-form]").getBoundingClientRect().width > 0,
+    }));
+    expect(layout.document).toBeLessThanOrEqual(layout.viewport);
+    expect(layout.formVisible).toBe(true);
+    if (width <= 600) expect(layout.rowColumns.split(" ")).toHaveLength(1);
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  await page.locator("[data-submit]").focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator(":focus")).toHaveAttribute("id", "input-comments");
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator(":focus")).toHaveAttribute("id", "input-trip-intent");
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator(":focus")).toHaveAttribute("id", "input-destination");
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator(":focus")).toHaveAttribute("id", "input-from");
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator(":focus")).toHaveAttribute("id", "input-nationality");
+  await page.locator("[data-submit]").focus();
+  await page.locator("[data-submit]").click();
+  await expect.poll(() => submitted.length).toBe(1);
+  expect(submitted[0]).toMatchObject({ nationality: "Canadian", from: "Georgia", destination: "Paris", purpose: "business", tripIntent: "entry" });
+  expect(submitted[0].comments || "").toBe("");
+});
+
+test("form introduction is a responsive hero labelled by its accessible heading", async ({ page }) => {
+  await page.goto("/");
+  const formView = page.locator('[data-view="form"]');
+  const heading = formView.getByRole("heading", { level: 1 });
+  await expect(formView).toHaveAttribute("aria-labelledby", "form-title");
+  await expect(heading).toHaveAttribute("id", "form-title");
+  await expect(heading).toHaveText(/Visa requirements,\s*in seconds\./);
+  await expect(formView.locator(".form-subtitle")).toHaveText(
+    "Check entry requirements for your trip, with live research and links to the sources.",
+  );
+
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    const layout = await formView.locator(".form-intro").evaluate((hero) => {
+      const title = hero.querySelector("h1");
+      const subtitle = hero.querySelector(".form-subtitle");
+      return {
+        background: getComputedStyle(hero).backgroundColor,
+        titleFontSize: parseFloat(getComputedStyle(title).fontSize),
+        heroWidth: hero.getBoundingClientRect().width,
+        titleWidth: title.scrollWidth,
+        titleClientWidth: title.clientWidth,
+        subtitleWidth: subtitle.scrollWidth,
+        subtitleClientWidth: subtitle.clientWidth,
+        documentWidth: document.documentElement.scrollWidth,
+        viewportWidth: document.documentElement.clientWidth,
+      };
+    });
+    expect(layout.background).toBe("rgb(193, 241, 29)");
+    expect(layout.titleFontSize).toBeGreaterThanOrEqual(38);
+    expect(layout.titleWidth).toBeLessThanOrEqual(layout.titleClientWidth);
+    expect(layout.subtitleWidth).toBeLessThanOrEqual(layout.subtitleClientWidth);
+    expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
+  }
+});
+
+test("form visual baseline is captured at required sizes and compact heights", async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem("visa-advisor.disclaimer", "v1"));
+  await page.goto("/");
+  const form = page.locator('[data-view="form"]');
+
+  for (const [width, theme] of [[1440, "light"], [390, "light"], [1440, "dark"], [390, "dark"]]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (let attempt = 0; attempt < 3 && await page.locator("body").getAttribute("class") !== `theme-${theme}`; attempt += 1) {
+      await page.locator("[data-theme-control]").click();
+    }
+    await expect(page.locator("body")).toHaveClass(`theme-${theme}`);
+    await expect(form).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`form-${theme}-${width}.png`), fullPage: true });
+  }
+
+  await page.setViewportSize({ width: 390, height: 680 });
+  const compact = await page.evaluate(() => {
+    const intro = document.querySelector(".form-intro");
+    const advisorForm = document.querySelector(".advisor-form");
+    const submit = document.querySelector("[data-submit]");
+    const field = document.querySelector("#input-nationality");
+    const box = (element) => element.getBoundingClientRect();
+    return {
+      introPaddingTop: getComputedStyle(intro).paddingTop,
+      formPaddingTop: getComputedStyle(advisorForm).paddingTop,
+      formGap: getComputedStyle(advisorForm).rowGap,
+      fieldVisible: box(field).width > 0 && box(field).height > 0,
+      submitVisible: box(submit).width > 0 && box(submit).height > 0,
+      submitReachableByScroll: box(submit).top < document.documentElement.scrollHeight,
+      viewportHeight: innerHeight,
+    };
+  });
+  expect(compact.introPaddingTop).toBe("24px");
+  expect(compact.formPaddingTop).toBe("20px");
+  expect(compact.formGap).toBe("12px");
+  expect(compact.fieldVisible).toBe(true);
+  expect(compact.submitVisible).toBe(true);
+  expect(compact.submitReachableByScroll).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("form-compact-390x680.png"), fullPage: true });
+});
+
+test("mast branding, keyboard theme control, and responsive widths", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("visa-advisor.disclaimer", "v1"));
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto("/");
+  await expect(page.getByRole("banner")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Visa Advisor — go to start" })).toBeVisible();
+  await expect(page.getByText("TRAVEL REQUIREMENTS")).toBeVisible();
+  const navigation = page.getByRole("navigation", { name: "Site controls" });
+  const theme = navigation.getByRole("button", { name: /Theme: Light/ });
+  await theme.focus();
+  await expect(theme).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("body")).toHaveClass(/theme-dark/);
+  await expect(navigation.getByRole("button", { name: /Theme: Dark/ })).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("Space");
+  await expect(page.locator("body")).not.toHaveClass(/theme-light|theme-dark/);
+  await page.emulateMedia({ colorScheme: "dark" });
+  expect(await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor)).toBe("rgb(20, 22, 18)");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("body")).toHaveClass(/theme-light/);
+
+  for (const width of [1440, 901, 900, 601, 600, 390]) {
+    await page.setViewportSize({ width, height: 800 });
+    const sizes = await page.evaluate(() => ({
+      document: document.documentElement.scrollWidth,
+      viewport: document.documentElement.clientWidth,
+      mastHeight: document.querySelector(".site-header--advisor").getBoundingClientRect().height,
+    }));
+    expect(sizes.document, `document overflow at ${width}px`).toBeLessThanOrEqual(sizes.viewport);
+    expect(sizes.mastHeight, `mast height at ${width}px`).toBe(width <= 900 ? 66 : 80);
+  }
+});
+
+test("shared focus indicators follow theme tokens and reduced motion suppresses effects", async ({ page }) => {
+  await page.goto("/");
+  await page.locator(".logo").focus();
+  await page.keyboard.press("Shift+Tab");
+  const skipLink = page.locator(".skip-link");
+  await expect(skipLink).toBeFocused();
+
+  for (const theme of ["theme-light", "theme-dark"]) {
+    await page.locator("body").evaluate((body, themeClass) => {
+      body.classList.remove("theme-light", "theme-dark");
+      body.classList.add(themeClass);
+    }, theme);
+    const focus = await skipLink.evaluate((node) => ({
+      outlineStyle: getComputedStyle(node).outlineStyle,
+      outlineColor: getComputedStyle(node).outlineColor,
+      expectedColor: (() => {
+        const probe = document.createElement("span");
+        probe.style.color = "var(--color-focus)";
+        document.body.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      })(),
+      landmark: Boolean(document.querySelector("main")),
+    }));
+    expect(focus.outlineStyle).toBe("solid");
+    expect(focus.outlineColor).toBe(focus.expectedColor);
+    expect(focus.landmark).toBe(true);
+  }
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const motion = await page.evaluate(() => ({
+    viewAnimation: getComputedStyle(document.querySelector(".view")).animationName,
+    buttonTransition: getComputedStyle(document.querySelector(".btn")).transitionDuration,
+    progressAnimation: getComputedStyle(document.querySelector(".action-bar-progress-fill")).animationName,
+  }));
+  expect(motion.viewAnimation).toBe("none");
+  expect(motion.buttonTransition.split(",").every((duration) => parseFloat(duration) === 0)).toBe(true);
+  expect(motion.progressAnimation).toBe("none");
+});
+
 test("checklist print is conditional, focused, one-shot, and preserves progress", async ({ page }) => {
   await page.clock.install({ time: new Date("2026-11-11T12:00:00+04:00") });
   await page.route("https://visa-advisor.sopetine.workers.dev/**", (route) =>
@@ -607,7 +826,7 @@ test("insecure government URLs are not presented as official", async ({ page }) 
   await expect(page.getByRole("heading", { name: /verify before sharing details/i })).toBeVisible();
 });
 
-test("research progress stays indeterminate until the report is ready", async ({ page }) => {
+test("research progress stays indeterminate until the report is ready", async ({ page }, testInfo) => {
   let release;
   await page.route("https://visa-advisor.sopetine.workers.dev/", async (route) => {
     await new Promise((resolve) => { release = resolve; });
@@ -622,10 +841,82 @@ test("research progress stays indeterminate until the report is ready", async ({
   const fill = page.locator("[data-action-bar-progress-fill]");
   await expect(fill).toHaveClass(/is-indeterminate/);
   await expect(fill).toHaveAttribute("style", /width: 0%/);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const theme of ["light", "dark"]) {
+      for (let attempt = 0; attempt < 3 && await page.locator("body").getAttribute("class") !== `theme-${theme}`; attempt += 1) {
+        await page.locator("[data-theme-control]").click();
+      }
+      await expect(page.locator("body")).toHaveClass(`theme-${theme}`);
+      await page.waitForTimeout(250);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`research-progress-${theme}-${width}.png`), fullPage: true });
+    }
+  }
   await expect.poll(() => typeof release).toBe("function");
   release();
   await expect(page.getByText("Visa-free", { exact: true }).first()).toBeVisible();
   await expect(fill).not.toHaveClass(/is-indeterminate/);
+});
+
+test("research error retry and clarification remain operable across themes and widths", async ({ page }, testInfo) => {
+  let requests = 0;
+  await page.route("https://visa-advisor.sopetine.workers.dev/", async (route) => {
+    requests += 1;
+    if (requests === 1) {
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Service temporarily unavailable" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(requests === 2
+      ? { type: "clarify", question: "Which passport will you travel on?" }
+      : report) });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "I understand" }).click();
+  await page.getByLabel(/Passport nationality/).fill("Canadian");
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+
+  const error = page.locator("[data-report-error]");
+  await expect(error).toBeVisible();
+  await expect(error).toHaveAttribute("role", "alert");
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const theme of ["light", "dark"]) {
+      await page.locator("[data-theme-control]").click();
+      for (let attempt = 0; attempt < 3 && await page.locator("body").getAttribute("class") !== `theme-${theme}`; attempt += 1) {
+        await page.locator("[data-theme-control]").click();
+      }
+      await expect(page.locator("body")).toHaveClass(`theme-${theme}`);
+      await page.waitForTimeout(250);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`report-error-${theme}-${width}.png`), fullPage: true });
+    }
+  }
+
+  // Exercise the OS dark theme path, where the theme control removes explicit classes.
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.locator("[data-theme-control]").click();
+  await expect(page.locator("body")).not.toHaveClass(/theme-/);
+  const retry = page.getByRole("button", { name: /try again/i });
+  await expect(retry).toHaveCSS("color", "rgb(20, 22, 18)");
+  await retry.focus();
+  await expect(retry).toBeFocused();
+  await retry.press("Enter");
+  const clarify = page.locator("[data-report-clarify]");
+  await expect(clarify).toBeVisible();
+  await expect(clarify).toContainText("Which passport will you travel on?");
+  await page.screenshot({ path: testInfo.outputPath("report-clarification-dark-mobile.png"), fullPage: true });
+  const answer = page.getByLabel("Your answer");
+  await answer.focus();
+  await expect(answer).toBeFocused();
+  await answer.fill("Canadian passport");
+  const sendAnswer = page.getByRole("button", { name: /send answer/i });
+  await expect(sendAnswer).toBeEnabled();
+  await expect(sendAnswer).toHaveCSS("color", "rgb(20, 22, 18)");
+  await sendAnswer.click();
+  await expect(page.getByText("Visa-free", { exact: true }).first()).toBeVisible();
 });
 
 test("the form remains usable on a narrow screen", async ({ page }) => {
@@ -805,6 +1096,17 @@ test("preparation actions toggle accessibly and leave cited evidence unchanged a
   expect(await evidence.evaluate((el) => ({ text: el.innerText, links: [...el.querySelectorAll("a")].map((a) => [a.textContent, a.href]) }))).toEqual(snapshot);
   await expect(page.locator(".before-you-book [aria-live='polite'][aria-atomic='true']")).toHaveCount(1);
 
+  const verifyLink = page.locator(".critical-step-verify").first();
+  await verifyLink.focus();
+  await expect(verifyLink).toBeFocused();
+  expect(await verifyLink.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
+  const evidenceLink = evidence.getByRole("link", { name: /Source: Immigration office/ });
+  await evidenceLink.focus();
+  await expect(evidenceLink).toBeFocused();
+  expect(await evidenceLink.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
+  await expect(evidence.locator('.evidence-checklist-item[data-status="supported"]')).toHaveCount(1);
+  await expect(evidence.locator(".checklist-warning").first()).toBeVisible();
+
   for (const colorScheme of ["light", "dark"]) {
     await page.emulateMedia({ colorScheme });
     if (colorScheme === "dark") {
@@ -829,8 +1131,246 @@ test("preparation actions toggle accessibly and leave cited evidence unchanged a
       await page.setViewportSize({ width, height: 900 });
       await expect(actions.nth(0)).toBeVisible();
       await expect(progress).toBeVisible();
+      await expect(evidenceLink).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: testInfo.outputPath(`preparation-${colorScheme}-${width}.png`), fullPage: true });
     }
   }
+});
+
+test("semantic theme tokens support explicit light, explicit dark, and system fallback", async ({ page }) => {
+  await page.goto("/");
+  const token = (name) => page.locator("body").evaluate((body, key) => getComputedStyle(body).getPropertyValue(key).trim(), name);
+
+  expect(await token("--color-lime")).toBe("#c1f11d");
+  expect(await token("--color-ink")).toBe("#141414");
+  expect(await token("--color-bg")).toBe("#fffee9");
+  expect(await token("--color-muted")).toBe("#717465");
+  expect(await token("--color-line")).toBe("#e8e8d9");
+  expect(await token("--color-field")).toBe("#f4f4e9");
+  expect(await token("--color-card-secondary")).toBe("#656b5c");
+  expect(await token("--color-hover")).toBe("#f0efd9");
+  expect(await token("--color-progress-done")).toBe("#edf3ce");
+  expect(await token("--color-progress-done-text")).toBe("#536519");
+  expect(await token("--color-error")).toBe("#a73523");
+
+  await page.locator("body").evaluate((body) => body.classList.replace("theme-light", "theme-dark"));
+  expect(await token("--color-bg")).toBe("#141612");
+  expect(await token("--color-card")).toBe("#24271f");
+  expect(await token("--color-field")).toBe("#20231c");
+  expect(await token("--color-ink")).toBe("#f5f5ec");
+  expect(await token("--main-white")).toBe("#24271f");
+  expect(await token("--text-and-icon-primary")).toBe("#f5f5ec");
+  expect(await token("--extensions-background-lighterror")).toBe("#592d29");
+  expect(await token("--extensions-background-lightwarning")).toBe("#51451f");
+  expect(await token("--extensions-background-lightsuccess")).toBe("#294631");
+  expect(await token("--color-ink-on-lime")).toBe("#141414");
+  const citedTag = await page.locator("body").evaluate((body) => {
+    const tag = document.createElement("span");
+    tag.className = "report-source-tag is-cited";
+    body.append(tag);
+    const style = getComputedStyle(tag);
+    return { color: style.color, backgroundColor: style.backgroundColor };
+  });
+  expect(citedTag).toEqual({ color: "rgb(20, 20, 20)", backgroundColor: "rgb(193, 241, 29)" });
+  const statusContrast = await page.locator("body").evaluate((body) => {
+    const style = getComputedStyle(body);
+    const luminance = (hex) => {
+      const channels = hex.trim().match(/[\da-f]{2}/gi).slice(-3).map((channel) => parseInt(channel, 16) / 255)
+        .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    return [
+      ["--extensions-text-and-icon-error", "--extensions-background-lighterror"],
+      ["--extensions-text-and-icon-warning", "--extensions-background-lightwarning"],
+      ["--extensions-text-and-icon-success", "--extensions-background-lightsuccess"],
+    ].map(([foreground, background]) => {
+      const values = [foreground, background].map((name) => style.getPropertyValue(name).trim());
+      const [high, low] = values.map(luminance).sort((a, b) => b - a);
+      return (high + 0.05) / (low + 0.05);
+    });
+  });
+  for (const ratio of statusContrast) expect(ratio).toBeGreaterThanOrEqual(4.5);
+  const warningConsumerContrast = await page.locator("body").evaluate((body) => {
+    const luminance = (color) => {
+      const channels = color.match(/[\d.]+/g).slice(0, 3).map(Number).map((channel) => {
+        const value = channel / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    return ["icon-chip icon-chip--warn", "status-badge--evisa", "report-caveats", "report-critical"]
+      .map((className) => {
+        const element = document.createElement("div");
+        element.className = className;
+        body.append(element);
+        const style = getComputedStyle(element);
+        const [high, low] = [luminance(style.color), luminance(style.backgroundColor)].sort((a, b) => b - a);
+        return (high + 0.05) / (low + 0.05);
+      });
+  });
+  for (const ratio of warningConsumerContrast) expect(ratio).toBeGreaterThanOrEqual(4.5);
+
+  await page.locator("body").evaluate((body) => body.classList.remove("theme-dark"));
+  await page.emulateMedia({ colorScheme: "dark" });
+  expect(await token("--color-bg")).toBe("#141612");
+  expect(await token("--color-ink")).toBe("#f5f5ec");
+});
+
+test("rendered validation, report status, and checklist progress meet theme contrast and keyboard requirements", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("visa-advisor.disclaimer", "v1"));
+  await page.route("https://visa-advisor.sopetine.workers.dev/", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(actionReport) })
+  );
+  await page.goto("/");
+  await page.locator("[data-form]").evaluate((form) => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+
+  const contrastRatio = (foreground, background) => {
+    const luminance = (color) => {
+      const channels = color.match(/[\d.]+/g).slice(0, 3).map(Number).map((channel) => {
+        const value = channel / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+    };
+    const [high, low] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+    return (high + 0.05) / (low + 0.05);
+  };
+  const renderedColors = (element) => element.evaluate((node) => {
+    const style = getComputedStyle(node);
+    let ancestor = node;
+    let backgroundColor = style.backgroundColor;
+    while (ancestor && (backgroundColor === "rgba(0, 0, 0, 0)" || backgroundColor === "transparent")) {
+      ancestor = ancestor.parentElement;
+      if (ancestor) backgroundColor = getComputedStyle(ancestor).backgroundColor;
+    }
+    return { color: style.color, backgroundColor };
+  });
+
+  for (const theme of ["light", "dark"]) {
+    await page.locator("body").evaluate((body, value) => {
+      body.classList.remove("theme-light", "theme-dark");
+      body.classList.add(`theme-${value}`);
+    }, theme);
+    const themeControl = page.locator("[data-theme-control]");
+    await themeControl.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(themeControl).toBeFocused();
+    const focusColors = await themeControl.evaluate((node) => {
+      const style = getComputedStyle(node);
+      let ancestor = node;
+      let backgroundColor = style.backgroundColor;
+      while (ancestor && (backgroundColor === "rgba(0, 0, 0, 0)" || backgroundColor === "transparent")) {
+        ancestor = ancestor.parentElement;
+        if (ancestor) backgroundColor = getComputedStyle(ancestor).backgroundColor;
+      }
+      return { outlineStyle: style.outlineStyle, outlineColor: style.outlineColor, backgroundColor };
+    });
+    expect(focusColors.outlineStyle, `${theme} rendered keyboard focus`).toBe("solid");
+    expect(contrastRatio(focusColors.outlineColor, focusColors.backgroundColor), `${theme} focus indicator`).toBeGreaterThanOrEqual(3);
+
+    const error = page.locator("#field-error-nationality");
+    const errorColors = await renderedColors(error);
+    expect(contrastRatio(errorColors.color, errorColors.backgroundColor), `${theme} validation text`).toBeGreaterThanOrEqual(4.5);
+
+    await page.getByLabel(/Passport nationality/).fill("Canadian");
+    await page.getByLabel(/Based in/).fill("Georgia");
+    await page.getByLabel(/Destination city/).fill("Paris");
+    await page.getByRole("button", { name: /Check requirements/ }).click();
+    const status = page.locator(".report-status .status-badge");
+    await expect(status).toBeVisible();
+    const statusColors = await renderedColors(status);
+    expect(contrastRatio(statusColors.color, statusColors.backgroundColor), `${theme} report status`).toBeGreaterThanOrEqual(4.5);
+
+    const checkbox = page.locator(".critical-step-checkbox").first();
+    await checkbox.focus();
+    await expect(checkbox).toBeFocused();
+    const progress = page.locator(".before-you-book-progress");
+    const progressColors = await renderedColors(progress);
+    expect(contrastRatio(progressColors.color, progressColors.backgroundColor), `${theme} checklist progress`).toBeGreaterThanOrEqual(4.5);
+    await page.evaluate(() => { location.hash = "#/"; });
+    await page.waitForSelector('[data-view="form"]:not([hidden])');
+  }
+});
+
+test("completed report cards, sources, and disclosures stay readable and keyboard visible", async ({ page }, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem("visa-advisor.disclaimer", "v1"));
+  await page.route("https://visa-advisor.sopetine.workers.dev/", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...report, caveats: "Check entry rules with the destination authority before travel.", searchQueries: ["Paris visa requirements official authority" ] }) })
+  );
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await page.getByLabel(/Passport nationality/).fill("Canadian");
+  await page.getByLabel(/Based in/).fill("Georgia");
+  await page.getByLabel(/Destination city/).fill("Paris");
+  await page.getByRole("button", { name: /Check requirements/ }).click();
+  await expect(page.locator(".report-status")).toContainText("Visa-free");
+  await expect(page.locator(".report-doc-group")).toContainText("Valid passport");
+  await expect(page.locator(".report-caveats")).toBeVisible();
+  await expect(page.locator(".report-research-warning")).toBeVisible();
+  await expect(page.locator(".report-sources")).toContainText("example.gov");
+  const disclosure = page.locator(".report-research-log");
+  await expect(disclosure).toBeVisible();
+  await disclosure.locator("summary").focus();
+  await expect(disclosure.locator("summary")).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(disclosure).not.toHaveAttribute("open", "");
+  const source = page.locator(".report-source-tag").first();
+  await source.focus();
+  await expect(source).toBeFocused();
+  expect(await source.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
+
+  for (const [width, theme] of [[1440, "light"], [390, "light"], [1440, "dark"], [390, "dark"]]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (let attempt = 0; attempt < 3 && await page.locator("body").getAttribute("class") !== `theme-${theme}`; attempt += 1) {
+      await page.locator("[data-theme-control]").click();
+    }
+    await expect(page.locator("body")).toHaveClass(`theme-${theme}`);
+    const layout = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
+    expect(layout.document).toBeLessThanOrEqual(layout.viewport);
+    const routeChip = await page.locator(".route-chip--alt").evaluate((el) => ({
+      color: getComputedStyle(el).color,
+      background: getComputedStyle(el).backgroundColor,
+      text: el.textContent.trim().replace(/\s+/g, " "),
+    }));
+    expect(routeChip.text).toBe("Georgia / Paris");
+    expect(routeChip.color).toBe(theme === "dark" ? "rgb(245, 245, 236)" : "rgb(20, 20, 20)");
+    expect(routeChip.background).toBe(theme === "dark" ? "rgb(20, 22, 18)" : "rgb(255, 254, 233)");
+    const reportCard = await page.locator(".report-section").first().evaluate((el) => ({
+      text: el.scrollWidth,
+      width: el.clientWidth,
+      background: getComputedStyle(el).backgroundColor,
+    }));
+    expect(reportCard.text).toBeLessThanOrEqual(reportCard.width);
+    expect(reportCard.background).not.toBe("rgba(0, 0, 0, 0)");
+    await page.screenshot({ path: testInfo.outputPath(`report-${theme}-${width}.png`), fullPage: true });
+  }
+});
+
+test("shared typography uses the requested stacks and compact display metrics", async ({ page }) => {
+  await page.goto("/");
+  const typography = await page.evaluate(() => {
+    const heading = document.createElement("h1");
+    document.body.append(heading);
+    const headingStyle = getComputedStyle(heading);
+    const bodyStyle = getComputedStyle(document.body);
+    return {
+      headingFamily: getComputedStyle(document.documentElement).getPropertyValue("--font-family-heading").trim(),
+      bodyFamily: getComputedStyle(document.documentElement).getPropertyValue("--font-family-body").trim(),
+      headingSize: headingStyle.fontSize,
+      headingTracking: headingStyle.letterSpacing,
+      headingLineHeight: headingStyle.lineHeight,
+      bodySize: bodyStyle.fontSize,
+      bodyLineHeight: bodyStyle.lineHeight,
+    };
+  });
+  expect(typography.headingFamily).toMatch(/^"Agrandir", "Suisse", Arial, system-ui, sans-serif$/);
+  expect(typography.bodyFamily).toMatch(/^"Suisse", Arial, system-ui, sans-serif$/);
+  expect(parseFloat(typography.headingSize)).toBeGreaterThanOrEqual(42);
+  expect(parseFloat(typography.headingSize)).toBeLessThanOrEqual(112);
+  expect(parseFloat(typography.headingTracking) / parseFloat(typography.headingSize)).toBeCloseTo(-0.06, 2);
+  expect(parseFloat(typography.headingLineHeight) / parseFloat(typography.headingSize)).toBeCloseTo(0.94, 2);
+  expect(typography.bodySize).toBe("16px");
+  expect(parseFloat(typography.bodyLineHeight) / parseFloat(typography.bodySize)).toBeCloseTo(1.375, 2);
 });

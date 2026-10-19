@@ -11,6 +11,42 @@
 import { findByCode } from "./countries.js";
 import { queryAdvisor } from "./api.js?v=5fd2244c4334b43507487024191f730ce45faff7150e4b49194ea5e59bcb29fc-sse1";
 
+// The mast control cycles explicit light → explicit dark → system preference.
+// No class on either root element means the semantic token layer follows OS preference.
+function initThemeControl() {
+  const control = document.querySelector("[data-theme-control]");
+  if (!control) return;
+  const label = control.querySelector("[data-theme-label]");
+  const body = document.body;
+  const root = document.documentElement;
+  const preference = window.matchMedia("(prefers-color-scheme: dark)");
+
+  function currentMode() {
+    if (body.classList.contains("theme-dark") || root.classList.contains("theme-dark")) return "dark";
+    if (body.classList.contains("theme-light") || root.classList.contains("theme-light")) return "light";
+    return "system";
+  }
+  function update() {
+    const mode = currentMode();
+    const effective = mode === "system" ? (preference.matches ? "Dark" : "Light") : mode === "dark" ? "Dark" : "Light";
+    label.textContent = mode === "system" ? `System (${effective})` : effective;
+    control.setAttribute("aria-pressed", String(mode !== "system"));
+    control.setAttribute("aria-label", `Theme: ${mode === "system" ? `System, currently ${effective.toLowerCase()}` : effective}; activate to switch to ${mode === "light" ? "dark" : mode === "dark" ? "system preference" : "light"}`);
+  }
+
+  control.addEventListener("click", () => {
+    const next = currentMode() === "light" ? "dark" : currentMode() === "dark" ? "system" : "light";
+    body.classList.remove("theme-light", "theme-dark");
+    root.classList.remove("theme-light", "theme-dark");
+    if (next !== "system") body.classList.add(`theme-${next}`);
+    update();
+  });
+  preference.addEventListener?.("change", update);
+  update();
+}
+
+initThemeControl();
+
 /* ──────────────────────────────────────────────────────────
    DISCLAIMER MODAL
    ────────────────────────────────────────────────────────── */
@@ -151,16 +187,33 @@ export function initForm({ onSubmit }) {
 
   function setError(field, msg) {
     const el = form.querySelector(`[data-error-for="${field}"]`);
+    const control = form.querySelector(`[data-field="${field}"] input, [data-field="${field}"] select, [data-field="${field}"] textarea`);
+    if (!el) return;
+    if (!el.id) el.id = `field-error-${field}`;
     el.textContent = msg;
     el.hidden = !msg;
     const wrap = form.querySelector(`[data-field="${field}"]`);
     if (wrap) wrap.classList.toggle("has-error", !!msg);
+    if (control) {
+      if (msg) {
+        control.setAttribute("aria-invalid", "true");
+        const describedBy = new Set((control.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean));
+        describedBy.add(el.id);
+        control.setAttribute("aria-describedby", [...describedBy].join(" "));
+      } else {
+        control.removeAttribute("aria-invalid");
+        const describedBy = (control.getAttribute("aria-describedby") || "").split(/\s+/).filter((id) => id && id !== el.id);
+        if (describedBy.length) control.setAttribute("aria-describedby", describedBy.join(" "));
+        else control.removeAttribute("aria-describedby");
+      }
+    }
   }
 
   function clearErrors() {
     form.querySelectorAll(".field-error").forEach((el) => {
-      el.hidden = true;
-      el.textContent = "";
+      const field = el.getAttribute("data-error-for");
+      if (field) setError(field, "");
+      else { el.hidden = true; el.textContent = ""; }
     });
     form.querySelectorAll("[data-field]").forEach((el) => el.classList.remove("has-error"));
   }
@@ -199,8 +252,13 @@ export function initForm({ onSubmit }) {
     submitBtn.disabled = !ok;
   }
   [nationalityEl, fromEl, destinationEl].forEach((el) => {
-    el.addEventListener("input",  refreshSubmitState);
-    el.addEventListener("change", refreshSubmitState);
+    const field = el.id === "input-nationality" ? "nationality" : el.id === "input-from" ? "from" : "destination";
+    const refresh = () => {
+      if (el.value.trim()) setError(field, "");
+      refreshSubmitState();
+    };
+    el.addEventListener("input", refresh);
+    el.addEventListener("change", refresh);
   });
 
   form.addEventListener("submit", async (e) => {
@@ -701,6 +759,8 @@ function renderEvidenceChecklist(checklist) {
   for (const item of items) {
     const li = document.createElement("li");
     li.className = "evidence-checklist-item";
+    li.dataset.status = item.status === "supported" ? "supported" : "unknown";
+    li.dataset.category = item.category === "document" ? "document" : "next-step";
     const category = item.category === "document" ? "Document" : "Next step";
     li.innerHTML = `<span class="checklist-state">${item.status === "supported" ? "Supported" : "Unknown requirement"}</span> <strong>${category}:</strong> <span class="checklist-text">${escapeHtml(item.text || "")}</span>`;
     for (const source of Array.isArray(item.sources) ? item.sources : []) {
@@ -2148,8 +2208,8 @@ function announce(text) {
    ────────────────────────────────────────────────────────── */
 
 const CLIP = {
-  font:     "font-family:'Inter','Helvetica Neue',Arial,sans-serif",
-  fontHead: "font-family:'Inter Tight','Inter','Helvetica Neue',Arial,sans-serif",
+  font:     "font-family:'Suisse',Arial,system-ui,sans-serif",
+  fontHead: "font-family:'Agrandir','Suisse',Arial,system-ui,sans-serif",
   c_text:   "#141414",
   c_sub:    "#6A6B6E",
   c_border: "#E4E5E6",

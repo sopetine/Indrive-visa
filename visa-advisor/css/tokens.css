@@ -1,8 +1,9 @@
 /* ============================================================
-   DESIGN TOKENS — derived from inDrive.com Oymyakon DS v4
+   DESIGN TOKENS — Nominations 2026 semantic foundation
    ============================================================ */
 
 :root {
+  --color-ink-on-lime: #141414;
   /* ---------- Brand colors ---------- */
   --main-green:        #C1F11D;
   --main-green-hover:  #9DD90D;
@@ -47,7 +48,7 @@
   --text-and-icon-accent:             #4087E1;
   --text-and-icon-disabled:           #BEC0C2;
   --text-and-icon-oncolor:            #FFFFFF;
-  --extensions-text-and-icon-onbrand: #141414;
+  --extensions-text-and-icon-onbrand: var(--color-ink-on-lime);
   --extensions-text-and-icon-error:   #D13D35;
   --extensions-text-and-icon-success: #02952B;
   --extensions-text-and-icon-warning: #FFC13C;
@@ -124,10 +125,10 @@
   --skeleton-start: #ECEBD8;
   --skeleton-end:   #F7F6E2;
 
-  /* ---------- Typography (commercial-safe substitutes) ---------- */
-  --font-family-body:     "Inter", "Helvetica Neue", Arial, sans-serif;
-  --font-family-heading:  "Inter Tight", "Inter", "Helvetica Neue", Arial, sans-serif;
-  --font-family-landing:  "Inter Tight", sans-serif;
+  /* ---------- Typography (licensed faces optional; free/system fallbacks) ---------- */
+  --font-family-body:     "Suisse", Arial, system-ui, sans-serif;
+  --font-family-heading:  "Agrandir", "Suisse", Arial, system-ui, sans-serif;
+  --font-family-landing:  "Agrandir", "Suisse", Arial, system-ui, sans-serif;
   --font-family-mono:     ui-monospace, SFMono-Regular, monospace;
 
   /* Font size scale (compact/main/promo system) */
@@ -163,7 +164,7 @@
   --fw-bold:     700;
 
   /* Letter spacing */
-  --ls-tight: -0.02em;
+  --ls-tight: -0.055em;
 
   /* Spacing scale (4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 / 96) */
   --sp-0:   0;
@@ -202,7 +203,7 @@
   --dur-medium: 300ms;
   --dur-slow:   600ms;
   --dur-slide:  5000ms;
-  --ease:       cubic-bezier(0.4, 0, 0.2, 1);
+  --ease:       cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out:   cubic-bezier(0, 0, 0.2, 1);
 
   /* Layout */
@@ -216,4 +217,184 @@
   --bp-md: 768px;
   --bp-lg: 1024px;
   --bp-xl: 1280px;
+}
+
+/*
+ * Theme contract: place `theme-light` or `theme-dark` on <html> or <body>.
+ * A class on either element is an explicit user choice and wins over system
+ * preference. With neither class present, prefers-color-scheme selects dark;
+ * light is the default. The current body.theme-light explicitly selects light.
+ */
+:root,
+:root .theme-light,
+:root.theme-light {
+  color-scheme: light;
+  --color-lime: #c1f11d;
+  --color-ink: #141414;
+  --color-bg: #fffee9;
+  --color-muted: #717465;
+  --color-line: #e8e8d9;
+  --color-field: #f4f4e9;
+  --color-card: #ffffff;
+  --color-card-secondary: #656b5c;
+  --color-hover: #f0efd9;
+  --color-progress-done: #edf3ce;
+  --color-progress-done-text: #536519;
+  --color-focus: #141414;
+  --color-focus-border: #91ac2a;
+  --color-focus-glow: #c1f11d22;
+  --color-error: #a73523;
+  --color-success: #236b38;
+  --color-warning: #765200;
+  --color-error-surface: #f8e5e0;
+  --color-success-surface: #e7ffaf;
+  --color-warning-surface: #fff1c0;
+  --color-neutral-surface: #f0efd9;
+  --color-accent-surface: #e2f4ff;
+}
+
+:root.theme-dark,
+:root .theme-dark,
+:root:has(body.theme-dark) {
+  color-scheme: dark;
+  --color-lime: #c1f11d;
+  --color-ink: #f5f5ec;
+  --color-bg: #141612;
+  --color-muted: #b5baa8;
+  --color-line: #41463a;
+  --color-field: #20231c;
+  --color-card: #24271f;
+  --color-card-secondary: #c5cab9;
+  --color-hover: #34382c;
+  --color-progress-done: #354019;
+  --color-progress-done-text: #e0f3a0;
+  --color-focus: #c1f11d;
+  --color-focus-border: #c1f11d;
+  --color-focus-glow: #c1f11d55;
+  --color-error: #ff9c86;
+  --color-success: #9de2ac;
+  --color-warning: #f2d278;
+  --color-error-surface: #592d29;
+  --color-success-surface: #294631;
+  --color-warning-surface: #51451f;
+  --color-neutral-surface: #34382c;
+  --color-accent-surface: #243b49;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.theme-light):not(.theme-dark):not(:has(body.theme-light, body.theme-dark)) {
+    color-scheme: dark;
+    --color-ink: #f5f5ec;
+    --color-bg: #141612;
+    --color-muted: #b5baa8;
+    --color-line: #41463a;
+    --color-field: #20231c;
+    --color-card: #24271f;
+    --color-card-secondary: #c5cab9;
+    --color-hover: #34382c;
+    --color-progress-done: #354019;
+    --color-progress-done-text: #e0f3a0;
+    --color-focus: #c1f11d;
+    --color-focus-border: #c1f11d;
+    --color-focus-glow: #c1f11d55;
+    --color-error: #ff9c86;
+    --color-success: #9de2ac;
+    --color-warning: #f2d278;
+    --color-error-surface: #592d29;
+    --color-success-surface: #294631;
+    --color-warning-surface: #51451f;
+    --color-neutral-surface: #34382c;
+    --color-accent-surface: #243b49;
+  }
+}
+
+/* Themeable status aliases used by the existing report and research styles. */
+:root.theme-dark,
+:root .theme-dark,
+:root:has(body.theme-dark) {
+  --extensions-background-success: #294631;
+  --extensions-background-error: #592d29;
+  --extensions-background-warning: #51451f;
+  --extensions-background-lightaccent: #243b49;
+  --extensions-background-lighterror: #592d29;
+  --extensions-background-lightsuccess: #294631;
+  --extensions-background-lightwarning: #51451f;
+  --extensions-background-lightneutral: #34382c;
+  --extensions-text-and-icon-success: #9de2ac;
+  --extensions-text-and-icon-warning: #f2d278;
+  --extensions-text-and-icon-error: #ff9c86;
+  --extensions-text-and-icon-onbrand: #141414;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.theme-light):not(.theme-dark):not(:has(body.theme-light, body.theme-dark)) {
+    --extensions-background-success: #294631;
+    --extensions-background-error: #592d29;
+    --extensions-background-warning: #51451f;
+    --extensions-background-lightaccent: #243b49;
+    --extensions-background-lighterror: #592d29;
+    --extensions-background-lightsuccess: #294631;
+    --extensions-background-lightwarning: #51451f;
+    --extensions-background-lightneutral: #34382c;
+    --extensions-text-and-icon-success: #9de2ac;
+    --extensions-text-and-icon-warning: #f2d278;
+    --extensions-text-and-icon-error: #ff9c86;
+    --extensions-text-and-icon-onbrand: #141414;
+  }
+}
+
+/* Semantic aliases keep the existing component styles working during migration. */
+:root,
+:root.theme-light,
+:root.theme-dark,
+:root .theme-light,
+:root .theme-dark,
+:root:has(body.theme-light),
+:root:has(body.theme-dark) {
+  --main-green: var(--color-lime);
+  --main-green-hover: #a4cf19;
+  --light-green: #edf3ce;
+  --light-green-hover: #f0efd9;
+  --soft-beige: var(--color-bg);
+  --neutral-beige: var(--color-line);
+  --main-dark: var(--color-ink);
+  --main-grey: var(--color-card-secondary);
+  --dark-grey-05: var(--color-muted);
+  --light-dark-03: var(--color-muted);
+  --main-white: var(--color-card);
+  --main-white-hover: var(--color-hover);
+  --main-dark-bg: var(--color-card);
+  --main-light-bg: var(--color-bg);
+  --font-color: var(--color-muted);
+  --error: var(--color-error);
+  --background-primary: var(--color-field);
+  --background-secondary: var(--color-card);
+  --background-tertiary: var(--color-line);
+  --background-disabled: var(--color-field);
+  --background-brand: var(--color-lime);
+  --border-primary: var(--color-line);
+  --border-disabled: var(--color-line);
+  --border-selected: var(--color-ink);
+  --text-and-icon-primary: var(--color-ink);
+  --text-and-icon-secondary: var(--color-muted);
+  --text-and-icon-disabled: var(--color-muted);
+  --text-and-icon-oncolor: #ffffff;
+  --extensions-text-and-icon-error: var(--color-error);
+  --extensions-background-error: var(--color-error-surface);
+  --extensions-text-and-icon-success: var(--color-success);
+  --extensions-text-and-icon-warning: var(--color-warning);
+  --extensions-text-and-icon-onbrand: #141414;
+  --extensions-background-success: var(--color-success-surface);
+  --extensions-background-warning: var(--color-warning-surface);
+  --extensions-text-neutral: var(--color-muted);
+  --extensions-text-sub: var(--color-card-secondary);
+  --extensions-background-lightaccent: var(--color-accent-surface);
+  --extensions-background-lightneutral: var(--color-neutral-surface);
+  --extensions-background-lighterror: var(--color-error-surface);
+  --extensions-background-lightsuccess: var(--color-success-surface);
+  --extensions-background-lightwarning: var(--color-warning-surface);
+  --information-dark-chickdark: var(--color-warning);
+  --extensions-border-warning: var(--color-warning);
+  --surface-light: var(--color-card);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
