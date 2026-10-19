@@ -197,7 +197,17 @@ export default {
       return json({ error: "Upstream returned non-JSON" }, 502, origin);
     }
 
+    const upstreamText = data?.choices?.[0]?.message?.content;
+    if (typeof upstreamText === "string" && !upstreamText.trim()) {
+      clearTimeout(upstreamTimer);request.signal.removeEventListener("abort", abortUpstream);
+      const finish = data?.choices?.[0]?.finish_reason || "unknown";
+      return json({ error: `The AI provider returned no answer (finish_reason: ${finish}). Please try again.` }, 502, origin);
+    }
     let parsed = parseContract(data, serverSearchSources, tavilyRawResults);
+    if (parsed.type === "error") {
+      clearTimeout(upstreamTimer);request.signal.removeEventListener("abort", abortUpstream);
+      return json({ error: parsed.error }, 502, origin);
+    }
     if (parsed.type === "report" && !String(parsed.markdown || "").trim()) {
       clearTimeout(upstreamTimer);request.signal.removeEventListener("abort", abortUpstream);
       const finish = data?.choices?.[0]?.finish_reason || "unknown";
@@ -233,6 +243,10 @@ export default {
         } catch {
           /* keep first attempt */
         }
+      }
+      if (parsed.type === "error") {
+        clearTimeout(upstreamTimer);request.signal.removeEventListener("abort", abortUpstream);
+        return json({ error: parsed.error }, 502, origin);
       }
     }
 
@@ -450,9 +464,8 @@ function extractFromChatCompletions(data) {
   return { text: typeof content === "string" ? content : "", annotations: [], searchCalls: [] };
 }
 
-/* The prompt still asks for a ```json fence around the structured
-   answer. If the LLM emitted one, parse it; otherwise treat the whole
-   response as the markdown body. */
+/* The model contract is a fenced JSON envelope. Unstructured model output
+   must not be promoted to a successful report. */
 function parseContract(data, serverSources = [], tavilyResults = []) {
   const { text, annotations, searchCalls } = extractFromChatCompletions(data);
 
@@ -466,6 +479,7 @@ function parseContract(data, serverSources = [], tavilyResults = []) {
     console.error("parseContract: no ```json fence found in model output", {
       textPreview: text.slice(0, 200),
     });
+    return { type: "error", error: "The AI provider returned an unrecognized response format. Please try again." };
   }
   if (fence) {
     try {
@@ -548,18 +562,7 @@ function parseContract(data, serverSources = [], tavilyResults = []) {
       /* fall through to raw-text fallback */
     }
   }
-  // Fallback: treat the entire response as markdown.
-  const out = {
-    type: "report",
-    markdown: text.trim(),
-    sourcesReturned: fallbackMerged.length,
-  };
-  if (annotations.length) out.annotations = annotations;
-  if (searchCalls.length) out.searchCalls = searchCalls;
-  if (fallbackMerged.length) out.sources = fallbackMerged;
-  out.checklist = buildEvidenceChecklist(out.markdown, annotations, fallbackMerged, null, "", text);
-  if (serverSources.length) out.serverSearchAvailable = true;
-  return out;
+  return { type: "error", error: "The AI provider returned an invalid report. Please try again." };
 }
 
 // Checklist entries are only actionable when a citation annotation overlaps
