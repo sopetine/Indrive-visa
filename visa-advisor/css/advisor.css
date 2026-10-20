@@ -2066,7 +2066,7 @@ body.theme-dark .action-bar-progress-step { color: #f5f5ec; }
 .report-status {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
-  align-items: center;
+  align-items: start;
   gap: 20px;
   padding: 24px;
   border-color: var(--color-lime);
@@ -2096,7 +2096,7 @@ body.theme-dark .action-bar-progress-step { color: #f5f5ec; }
 }
 .status-badge .hl-sm { color: inherit; background: var(--color-field); }
 .report-status .status-stay-label { color: var(--color-ink-on-lime); }
-.status-stay-value { color: var(--color-ink); font-size: 12px; line-height: 18px; }
+.status-stay-value { color: var(--color-ink); font-size: 18px; font-weight: 700; line-height: 1.2; }
 .status-stay { min-width: 0; max-width: 100%; }
 @media (max-width: 700px) {
   .report-status { display: flex; align-items: stretch; flex-direction: column; gap: 12px; }
