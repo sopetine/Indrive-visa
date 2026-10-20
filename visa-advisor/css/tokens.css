@@ -10,7 +10,7 @@
   --light-green:       #E4FF88;
   --light-green-hover: #F6FFAA;
   --additional-background-progressbuttonbrand: #66A20F;
-  --soft-beige:        #F8F7E4;
+  --soft-beige:        #F4F3D8;
   --neutral-beige:     #DCDBC7;
   --main-dark:         #141414;
   --main-grey:         rgba(20, 20, 20, 0.8);
@@ -126,9 +126,9 @@
   --skeleton-end:   #F7F6E2;
 
   /* ---------- Typography (licensed faces optional; free/system fallbacks) ---------- */
-  --font-family-body:     "Suisse", Arial, system-ui, sans-serif;
-  --font-family-heading:  "Agrandir", "Suisse", Arial, system-ui, sans-serif;
-  --font-family-landing:  "Agrandir", "Suisse", Arial, system-ui, sans-serif;
+  --font-family-body:     "Inter", system-ui, sans-serif;
+  --font-family-heading:  "Archivo", system-ui, sans-serif;
+  --font-family-landing:  "Archivo", system-ui, sans-serif;
   --font-family-mono:     ui-monospace, SFMono-Regular, monospace;
 
   /* Font size scale (compact/main/promo system) */
@@ -259,11 +259,11 @@
   color-scheme: dark;
   --color-lime: #c1f11d;
   --color-ink: #f5f5ec;
-  --color-bg: #141612;
+  --color-bg: #141414;
   --color-muted: #b5baa8;
   --color-line: #41463a;
-  --color-field: #20231c;
-  --color-card: #24271f;
+  --color-field: #262626;
+  --color-card: #1f1f1f;
   --color-card-secondary: #c5cab9;
   --color-hover: #34382c;
   --color-progress-done: #354019;
@@ -285,11 +285,11 @@
   :root:not(.theme-light):not(.theme-dark):not(:has(body.theme-light, body.theme-dark)) {
     color-scheme: dark;
     --color-ink: #f5f5ec;
-    --color-bg: #141612;
+    --color-bg: #141414;
     --color-muted: #b5baa8;
     --color-line: #41463a;
-    --color-field: #20231c;
-    --color-card: #24271f;
+    --color-field: #262626;
+    --color-card: #1f1f1f;
     --color-card-secondary: #c5cab9;
     --color-hover: #34382c;
     --color-progress-done: #354019;

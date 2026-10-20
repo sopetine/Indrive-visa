@@ -32,27 +32,17 @@
 
 /* Primary (lime-green fill, dark text) — matches inDrive header CTA */
 .btn--primary {
-  min-height: 49px;
-  background: var(--color-ink);
-  color: #fff;
-  border: 2px solid var(--color-ink);
-  border-radius: 14px;
+  min-height: 64px;
+  background: var(--color-lime);
+  color: var(--color-ink-on-lime);
+  border: 0;
+  border-radius: 16px;
   font-weight: 600;
 }
-body.theme-dark .btn--primary { color: var(--color-bg); }
-body.theme-dark .btn--primary:hover { color: #fff; }
-@media (prefers-color-scheme: dark) {
-  :root:not(.theme-light):not(.theme-dark):not(:has(body.theme-light, body.theme-dark)) .btn--primary {
-    color: var(--color-bg);
-  }
-  :root:not(.theme-light):not(.theme-dark):not(:has(body.theme-light, body.theme-dark)) .btn--primary:hover {
-    color: #fff;
-  }
-}
+.btn--primary:focus-visible { outline-color: var(--color-ink-on-lime); }
 .btn--primary:hover {
-  background: #30332a;
-  border-color: #30332a;
-  color: #fff;
+  background: var(--main-green-hover);
+  color: var(--color-ink-on-lime);
   box-shadow: none;
 }
 .btn--primary:active { transform: scale(0.98); }
@@ -121,9 +111,9 @@ body.theme-dark .btn--primary:hover { color: #fff; }
   border-width: 2px;
 }
 .btn--lg {
-  height: 52px;
-  padding: 0 24px;
-  font-size: var(--fs-m);
+  height: 64px;
+  padding: 0 32px;
+  font-size: 20px;
 }
 
 /* Ripple slot (visual flourish, mirrors inDrive .pharb8i) */

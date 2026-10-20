@@ -111,4 +111,31 @@ for (const theme of themes) {
     }
     expect(failures, `Contrast failures (${failures.length}):\n${failures.join("\n")}`).toEqual([]);
   });
+
+  test(`research progress text contrast meets WCAG AA · ${theme.name}`, async ({ page }) => {
+    let release;
+    await page.addInitScript(() => localStorage.setItem("visa-advisor.disclaimer", "v1"));
+    await page.emulateMedia({ colorScheme: theme.scheme, reducedMotion: "reduce" });
+    await page.route("https://visa-advisor.sopetine.workers.dev/", async (route) => {
+      await new Promise((resolve) => { release = resolve; });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(report) });
+    });
+    await page.goto("/");
+    if (theme.className) await page.evaluate((name) => { document.body.classList.remove("theme-light", "theme-dark"); document.body.classList.add(name); }, theme.className);
+    await page.getByLabel(/Passport nationality/).fill("Indian");
+    await page.getByLabel(/Based in/).fill("Georgia");
+    await page.getByLabel(/Destination city/).fill("Paris");
+    await page.getByRole("button", { name: /Check requirements/ }).click();
+    await expect(page.locator("[data-action-bar-progress]")).toBeVisible();
+    await expect(page.locator("[data-report-loading]")).toBeVisible();
+    const failures = [];
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      failures.push(...(await audit(page)).map((failure) => `progress @${width}: ${failure}`));
+    }
+    expect(failures, `Contrast failures (${failures.length}):\n${failures.join("\n")}`).toEqual([]);
+    await expect.poll(() => typeof release).toBe("function");
+    release();
+    await expect(page.locator(".status-badge")).toBeVisible();
+  });
 }

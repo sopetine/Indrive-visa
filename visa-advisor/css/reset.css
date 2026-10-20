@@ -17,8 +17,8 @@ body {
   font-family: var(--font-family-body);
   font-size: var(--fs-main-body);
   line-height: var(--lh-compact-body);
-  color: var(--main-dark);
-  background: var(--soft-beige);
+  color: var(--color-ink);
+  background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -47,6 +47,7 @@ ul, ol { list-style: none; }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-family-heading);
+  font-stretch: 112%;
   font-weight: var(--fw-bold);
   letter-spacing: var(--ls-tight);
   text-wrap: balance;
