@@ -2064,14 +2064,20 @@ body.theme-dark .action-bar-progress-step { color: #f5f5ec; }
   box-shadow: var(--shadow-m);
 }
 .report-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
+  align-items: center;
   gap: 20px;
-  padding: 40px;
+  padding: 24px;
   border-color: var(--color-lime);
   background: var(--color-lime);
   box-shadow: none;
 }
 .status-badge {
+  min-width: 0;
   max-width: 100%;
+  font-size: 18px;
+  padding-inline: 16px;
   color: var(--color-ink);
   background: var(--color-card);
   border-radius: 12px;
@@ -2090,9 +2096,10 @@ body.theme-dark .action-bar-progress-step { color: #f5f5ec; }
 }
 .status-badge .hl-sm { color: inherit; background: var(--color-field); }
 .report-status .status-stay-label { color: var(--color-ink-on-lime); }
-.status-stay-value { color: var(--color-ink); }
+.status-stay-value { color: var(--color-ink); font-size: 12px; line-height: 18px; }
+.status-stay { min-width: 0; max-width: 100%; }
 @media (max-width: 700px) {
-  .report-status { align-items: stretch; flex-direction: column; }
+  .report-status { display: flex; align-items: stretch; flex-direction: column; gap: 12px; }
   .status-badge { width: 100%; }
   .status-stay { text-align: left; }
 }
@@ -2118,8 +2125,8 @@ body.theme-dark .action-bar-progress-step { color: #f5f5ec; }
 .report-body .report-doc-group-title {
   color: var(--color-ink);
   font-family: var(--font-family-heading);
-  font-size: 30px;
-  line-height: 32px;
+  font-size: 16px;
+  line-height: 24px;
   font-weight: 800;
   letter-spacing: -0.02em;
   font-stretch: 112%;
@@ -2404,8 +2411,8 @@ body.theme-dark .action-bar-progress-step { color: #f5f5ec; }
   .status-badge { justify-content: flex-start; width: 100%; }
   .status-stay { text-align: left; }
   .report-section { padding: 16px; }
-  .report-body .report-section-title,
-  .report-body .report-doc-group-title { font-size: 22px; line-height: 26px; }
+  .report-body .report-section-title { font-size: 22px; line-height: 26px; }
+  .report-body .report-doc-group-title { font-size: 16px; line-height: 24px; }
   .report-section--collapsible .report-section-summary { margin: -16px; padding: 16px; }
   .report-grid { grid-template-columns: minmax(0, 1fr); }
   .report-source-tag { max-width: 100%; }
