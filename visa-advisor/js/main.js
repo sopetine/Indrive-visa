@@ -48,6 +48,7 @@ function start() {
 
   function handleRoute() {
     const hash = window.location.hash.slice(1) || "/";
+    if (hash === "report-top" && !reportApi.el.hidden) return;
     const [path, qs] = hash.split("?");
     // ROUTES is built here (not at module top level) because showForm/showReport
     // are declared inside start() and aren't in scope until start() runs.

@@ -737,6 +737,12 @@ export async function renderReport(body, markdown, annotations, critical, caveat
   // Disclaimer (always last)
   body.appendChild(renderDisclaimer(meta.lastVerified));
 
+  const backToTop = document.createElement("a");
+  backToTop.className = "report-back-to-top";
+  backToTop.href = "#report-top";
+  backToTop.textContent = "Back to top";
+  body.appendChild(backToTop);
+
   // Post-render: strip 🚨 [TYPE] markers and tag the right CSS classes.
   markCriticalFacts(body);
 
