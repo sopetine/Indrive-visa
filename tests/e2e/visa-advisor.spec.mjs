@@ -1,9 +1,45 @@
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test, expect } from "@playwright/test";
 
 const prompt = readFileSync(new URL("../../visa-advisor/visa-advisor-prompt.md", import.meta.url), "utf8").trim();
 const promptHash = createHash("sha256").update(prompt).digest("hex");
+
+test("Pages artifact uses one release version while local source still loads", async ({ page }) => {
+  const output = mkdtempSync(join(tmpdir(), "visa-pages-"));
+  const release = "0123456789abcdef";
+  const source = fileURLToPath(new URL("../../visa-advisor/", import.meta.url));
+  try {
+    execFileSync(process.execPath, ["scripts/prepare-pages.mjs", source, output, release]);
+    const assets = [];
+    const walk = (directory) => {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) walk(path);
+        else if (/\.(?:html|js)$/.test(entry.name)) {
+          const content = readFileSync(path, "utf8");
+          for (const match of content.matchAll(/(["'])([^"'\s]+\.(?:css|js))(?:\?([^"'\s]*))?\1/g)) {
+            if (/^(?:[a-z]+:|\/\/|data:)/i.test(match[2])) continue;
+            assets.push({ path: relative(output, path), url: match[2], query: match[3] });
+          }
+        }
+      }
+    };
+    walk(output);
+    expect(assets.length).toBeGreaterThan(0);
+    for (const asset of assets) expect(asset.query, `${asset.path}: ${asset.url}`).toBe(`v=${release}`);
+    expect(readFileSync(join(source, "index.html"), "utf8")).toContain("css/tokens.css?v=20261012-1");
+  } finally {
+    rmSync(output, { recursive: true, force: true });
+  }
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /visa/i }).first()).toBeVisible();
+});
 
 const report = {
   type: "report",
