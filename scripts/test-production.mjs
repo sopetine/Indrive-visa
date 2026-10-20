@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -64,9 +64,16 @@ try {
   const html = await response.text();
   const refs = [...html.matchAll(/(?:src|href)=["']([^"']+\.(?:m?js|css)(?:\?[^"']*)?)["']/gi)].map((m) => m[1]);
   const assets = new Set(refs.map((ref) => new URL(ref, productionURL).href));
-  const staticRoot = localMode
+  let staticRoot = localMode
     ? resolve("visa-advisor")
     : join(work, "visa-advisor");
+  // The Pages workflow stamps the release into asset URLs; compare with that same prepared output.
+  const prepare = join(work, "scripts", "prepare-pages.mjs");
+  if (!localMode && existsSync(prepare)) {
+    const prepared = join(work, "_site");
+    execFileSync(process.execPath, [prepare, staticRoot, prepared, sha], { cwd: work, stdio: "inherit" });
+    staticRoot = prepared;
+  }
   if (!assets.size) throw new Error("No JavaScript or CSS assets were referenced by the deployed page");
   while (assets.size) {
     const assetURL = assets.values().next().value;
