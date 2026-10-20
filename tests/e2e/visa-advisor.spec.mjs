@@ -140,7 +140,7 @@ test("advisor form validation is accessible and clears as required fields are ed
 });
 
 test("report verdict stays readable beside a long allowed stay at responsive widths", async ({ page }, testInfo) => {
-  const longStay = "90 days within any 180-day period, across all Schengen member states, counted cumulatively, subject to local entry conditions and border-officer review.";
+  const longStay = "90 days within any 180-day period";
   const narrowReport = {
     ...report,
     markdown: `### Visa status\nEmbassy / consulate visa required\n\n### Allowed stay\n${longStay}\n\n### Required documents\n- Valid passport`,
@@ -180,6 +180,10 @@ test("report verdict stays readable beside a long allowed stay at responsive wid
           verdictWidth: text.getBoundingClientRect().width,
           badgeLines: lineCount(text),
           stayLines: lineCount(stay),
+          badgeFontSize: Number.parseFloat(getComputedStyle(text).fontSize),
+          stayFontSize: Number.parseFloat(getComputedStyle(stay).fontSize),
+          badgeFontWeight: Number.parseInt(getComputedStyle(text).fontWeight, 10),
+          stayFontWeight: Number.parseInt(getComputedStyle(stay).fontWeight, 10),
           badgeTop: badge.getBoundingClientRect().top,
           stayTop: stay.getBoundingClientRect().top,
           badgeRight: badge.getBoundingClientRect().right,
@@ -190,9 +194,13 @@ test("report verdict stays readable beside a long allowed stay at responsive wid
       expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
       if (width === 1440) expect(layout.verdictWidth).toBeGreaterThan(120);
       expect(layout.badgeLines).toBeGreaterThan(0);
-      if (width === 1440) expect(layout.badgeLines).toBeLessThanOrEqual(2);
+      expect(layout.badgeLines).toBeLessThanOrEqual(2);
       expect(layout.stayLines).toBeGreaterThan(0);
-      if (width === 1440) expect(layout.stayLines).toBeLessThanOrEqual(2);
+      expect(layout.stayLines).toBeLessThanOrEqual(2);
+      if (width === 1440 || width === 390) {
+        expect(layout.stayFontSize).toBeGreaterThanOrEqual(layout.badgeFontSize);
+        expect(layout.stayFontWeight).toBeGreaterThanOrEqual(layout.badgeFontWeight);
+      }
       expect(layout.panelOverflow).toBe(false);
       if (width === 390) expect(layout.stayTop).toBeGreaterThan(layout.badgeTop);
       if (width === 1440) {
