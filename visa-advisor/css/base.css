@@ -5,7 +5,7 @@
 body {
   font-family: var(--font-family-body);
   font-size: clamp(14px, 1rem, 16px);
-  line-height: 1.375;
+  line-height: 1.5;
 }
 
 /* Compact display typography; h1 is sized for hero use. */

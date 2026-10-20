@@ -19,3 +19,5 @@ Changes to `visa-advisor/` on `main` publish automatically to GitHub Pages throu
 The same workflow also deploys the Worker to Cloudflare (`wrangler deploy`) on every push to `main`, after the tests pass. Only the `LLM_API_KEY` secret is set by hand (`npx wrangler secret put LLM_API_KEY` in `worker/`). `scripts/deploy.sh` remains for manual deploys.
 
 Coding agents: start with [AGENTS.md](AGENTS.md).
+
+The optional `npm run test:production` smoke check can enable a live Worker probe with `AIFACTORY_LIVE_WORKER_PROBE=1`. If the Worker returns an unrecognized response format, the probe retries once; a second unusable response fails verification and is recorded as a product defect. Other provider availability failures remain recorded as unexercised probes.

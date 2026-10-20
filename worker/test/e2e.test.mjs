@@ -95,7 +95,9 @@ test("uses OpenCode chat completions request, required headers, and normalized c
   assert.equal(upstreamUrl, "https://opencode.ai/zen/go/v1/chat/completions");
   assert.equal(sent.model, "deepseek-v4.1-flash");
   assert.deepEqual(sent.messages.map(({ role }) => role), ["system", "user"]);
-  assert.equal(sent.messages[0].content, systemPrompt);
+  assert.match(sent.messages[0].content, /Tools are unavailable/);
+  assert.match(sent.messages[0].content, /supplied research evidence/);
+  assert.ok(sent.messages[0].content.startsWith(systemPrompt));
   assert.equal(firstUserMessage, [
     "Nationality: Russian",
     "From:         Georgia",
@@ -133,6 +135,48 @@ test("malformed DSML tool-call text is rejected instead of returned as a report"
   assert.equal(result.type, undefined);
   assert.match(result.error, /unrecognized response format/i);
   assert.equal(JSON.stringify(result).includes("DSML"), false);
+});
+
+test("invalid tool-call response is repaired once using the original signal and deadline", async () => {
+  const calls = [];
+  const originalTimeout = globalThis.setTimeout;
+  let requestTimers = 0;
+  globalThis.setTimeout = (callback, delay, ...args) => {
+    if (delay === 100_000) requestTimers++;
+    return originalTimeout(callback, delay, ...args);
+  };
+  globalThis.fetch = async (_url, init) => {
+    calls.push({ signal: init.signal, body: JSON.parse(init.body) });
+    return calls.length === 1
+      ? Response.json({ choices: [{ message: { content: '<tool_call>{"name":"web_search"}</tool_call>' } }] })
+      : reportResponse([{ title: "UK Government", url: "https://www.gov.uk/" }]);
+  };
+  try {
+    const response = await worker.fetch(request(), env);
+    const report = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(report.type, "report");
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].signal, calls[1].signal);
+    assert.equal(requestTimers, 1);
+    assert.match(calls[1].body.messages[1].content, /search results are already provided/i);
+    assert.match(calls[1].body.messages[1].content, /tools are unavailable/i);
+    assert.match(calls[1].body.messages[1].content, /contract immediately/i);
+  } finally {
+    globalThis.setTimeout = originalTimeout;
+  }
+});
+
+test("two invalid contract replies preserve the clear error and stop after two calls", async () => {
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return Response.json({ choices: [{ message: { content: "not a fenced contract" } }] });
+  };
+  const response = await worker.fetch(request(), env);
+  assert.equal(response.status, 502);
+  assert.match((await response.json()).error, /unrecognized response format/i);
+  assert.equal(calls, 2);
 });
 
 test("chat-completions report keeps Tavily sources in the website contract", async () => {
@@ -390,6 +434,26 @@ test("client cancellation aborts the active provider request", async () => {
   const response = await pending;
   assert.equal(response.status, 504);
   assert.equal(upstreamAborted, true);
+});
+
+test("client cancellation during contract repair aborts the repair call", async () => {
+  const client = new AbortController();
+  const signals = [];
+  let repairStarted;
+  const started = new Promise((resolve) => { repairStarted = resolve; });
+  globalThis.fetch = (_url, { signal }) => {
+    signals.push(signal);
+    if (signals.length === 1) return Promise.resolve(Response.json({ choices: [{ message: { content: "invalid" } }] }));
+    repairStarted();
+    return new Promise((resolve, reject) => signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true }));
+  };
+  const pending = worker.fetch(request({}, { signal: client.signal }), env);
+  await started;
+  client.abort();
+  const response = await pending;
+  assert.equal(response.status, 504);
+  assert.equal(signals.length, 2);
+  assert.equal(signals[0], signals[1]);
 });
 
 test("reasoning budget is large enough and an empty answer is an error, not a blank report", async () => {
