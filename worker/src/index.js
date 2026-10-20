@@ -167,7 +167,7 @@ export default {
       max_tokens: 32768,
       reasoning_effort: "low",
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: `${systemPrompt}\n\nTools are unavailable. Answer using the supplied research evidence in the required fenced JSON contract.` },
         { role: "user", content: msg },
       ],
     });
@@ -205,8 +205,21 @@ export default {
     }
     let parsed = parseContract(data, serverSearchSources, tavilyRawResults);
     if (parsed.type === "error") {
-      clearTimeout(upstreamTimer);request.signal.removeEventListener("abort", abortUpstream);
-      return json({ error: parsed.error }, 502, origin);
+      const repairMsg = `${userMessage}\n\nCONTRACT REPAIR: Search results are already provided above. Tools are unavailable; do not call or imitate tools. Return the required fenced JSON contract immediately.`;
+      try {
+        const repair = await callUpstream(env, requestBody(repairMsg), upstreamController.signal, sessionId);
+        if (repair.ok) parsed = parseContract(await repair.json(), serverSearchSources, tavilyRawResults);
+      } catch {
+        // Keep the contract error unless the shared request deadline or client signal aborted.
+      }
+      if (upstreamController.signal.aborted) {
+        clearTimeout(upstreamTimer);request.signal.removeEventListener("abort", abortUpstream);
+        return json({ error: "Upstream request timed out" }, 504, origin);
+      }
+      if (parsed.type === "error") {
+        clearTimeout(upstreamTimer);request.signal.removeEventListener("abort", abortUpstream);
+        return json({ error: parsed.error }, 502, origin);
+      }
     }
     if (parsed.type === "report" && !String(parsed.markdown || "").trim()) {
       clearTimeout(upstreamTimer);request.signal.removeEventListener("abort", abortUpstream);

@@ -33,6 +33,8 @@
 /* Primary (lime-green fill, dark text) — matches inDrive header CTA */
 .btn--primary {
   min-height: 64px;
+  font-size: 20px;
+  line-height: 24px;
   background: var(--color-lime);
   color: var(--color-ink-on-lime);
   border: 0;

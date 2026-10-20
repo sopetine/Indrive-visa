@@ -201,10 +201,18 @@ test("form introduction is a responsive hero labelled by its accessible heading"
         background: getComputedStyle(hero).backgroundColor,
         markerBackground: getComputedStyle(title.querySelector(".hl")).backgroundColor,
         submitWidth: document.querySelector("[data-submit]").getBoundingClientRect().width,
+        submitPaddingTop: getComputedStyle(document.querySelector("[data-submit]")).paddingTop,
+        submitPaddingLeft: getComputedStyle(document.querySelector("[data-submit]")).paddingLeft,
+        submitFontSize: getComputedStyle(document.querySelector("[data-submit]")).fontSize,
+        submitLineHeight: getComputedStyle(document.querySelector("[data-submit]")).lineHeight,
+        formPadding: getComputedStyle(document.querySelector(".advisor-form")).padding,
+        bodyLineHeight: getComputedStyle(document.body).lineHeight,
         titleFontSize: parseFloat(getComputedStyle(title).fontSize),
         heroWidth: hero.getBoundingClientRect().width,
         titleWidth: title.scrollWidth,
         titleClientWidth: title.clientWidth,
+        titleLeft: title.getBoundingClientRect().left,
+        subtitleLeft: subtitle.getBoundingClientRect().left,
         subtitleWidth: subtitle.scrollWidth,
         subtitleClientWidth: subtitle.clientWidth,
         documentWidth: document.documentElement.scrollWidth,
@@ -214,9 +222,16 @@ test("form introduction is a responsive hero labelled by its accessible heading"
     expect(layout.background).toBe("rgba(0, 0, 0, 0)");
     expect(layout.markerBackground).toBe("rgb(193, 241, 29)");
     expect(layout.titleFontSize).toBeGreaterThanOrEqual(44);
+    expect(layout.bodyLineHeight).toBe("24px");
     expect(layout.titleWidth).toBeLessThanOrEqual(layout.titleClientWidth);
     expect(layout.subtitleWidth).toBeLessThanOrEqual(layout.subtitleClientWidth);
+    expect(Math.abs(layout.titleLeft - layout.subtitleLeft)).toBeLessThanOrEqual(1);
     expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
+    expect(layout.submitPaddingTop).toBe("20px");
+    expect(layout.submitPaddingLeft).toBe("32px");
+    expect(layout.submitFontSize).toBe("20px");
+    expect(layout.submitLineHeight).toBe("24px");
+    expect(layout.formPadding).toBe(width === 1440 ? "24px" : "16px");
     if (width === 390) expect(layout.submitWidth).toBeGreaterThanOrEqual(300);
   }
 });
@@ -255,7 +270,7 @@ test("form visual baseline is captured at required sizes and compact heights", a
     };
   });
   expect(compact.introPaddingTop).toBe("24px");
-  expect(compact.formPaddingTop).toBe("20px");
+  expect(compact.formPaddingTop).toBe("16px");
   expect(compact.formGap).toBe("12px");
   expect(compact.fieldVisible).toBe(true);
   expect(compact.submitVisible).toBe(true);
@@ -1466,14 +1481,70 @@ test("completed report cards, sources, and disclosures stay readable and keyboar
     await expect(page.locator("body")).toHaveClass(`theme-${theme}`);
     const layout = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
     expect(layout.document).toBeLessThanOrEqual(layout.viewport);
+    expect(await page.locator("body").evaluate((el) => getComputedStyle(el).lineHeight)).toBe("24px");
+    const disclosureBounds = await page.locator(".report-section--collapsible").first().evaluate((section) => {
+      const card = section.getBoundingClientRect();
+      const summary = section.querySelector("summary").getBoundingClientRect();
+      return { cardLeft: card.left, cardRight: card.right, summaryLeft: summary.left, summaryRight: summary.right };
+    });
+    expect(disclosureBounds.summaryLeft).toBeGreaterThanOrEqual(disclosureBounds.cardLeft);
+    expect(disclosureBounds.summaryRight).toBeLessThanOrEqual(disclosureBounds.cardRight);
     const routeChip = await page.locator(".route-chip--alt").evaluate((el) => ({
       color: getComputedStyle(el).color,
       background: getComputedStyle(el).backgroundColor,
+      height: el.getBoundingClientRect().height,
+      fontSize: getComputedStyle(el).fontSize,
+      fontWeight: getComputedStyle(el).fontWeight,
+      padding: getComputedStyle(el).padding,
       text: el.textContent.trim().replace(/\s+/g, " "),
     }));
     expect(routeChip.text).toBe("Georgia / Paris");
     expect(routeChip.color).toBe(theme === "dark" ? "rgb(245, 245, 236)" : "rgb(20, 20, 20)");
     expect(routeChip.background).toBe(theme === "dark" ? "rgb(20, 20, 20)" : "rgb(255, 254, 233)");
+    expect(routeChip.height).toBe(38);
+    expect(routeChip.fontSize).toBe("16px");
+    expect(routeChip.fontWeight).toBe("600");
+    expect(routeChip.padding).toBe("8px 20px");
+    const sourceChip = await page.locator(".report-source-tag").first().evaluate((el) => ({
+      height: el.getBoundingClientRect().height,
+      fontSize: getComputedStyle(el).fontSize,
+      fontWeight: getComputedStyle(el).fontWeight,
+      padding: getComputedStyle(el).padding,
+    }));
+    expect(sourceChip.height).toBe(38);
+    expect(sourceChip.fontSize).toBe("16px");
+    expect(sourceChip.fontWeight).toBe("600");
+    expect(sourceChip.padding).toBe("8px 20px");
+    const actionButton = await page.locator(".action-bar-link").first().evaluate((el) => ({
+      height: el.getBoundingClientRect().height,
+      fontSize: getComputedStyle(el).fontSize,
+      fontWeight: getComputedStyle(el).fontWeight,
+      borderRadius: getComputedStyle(el).borderTopLeftRadius,
+    }));
+    expect(actionButton.height).toBe(40);
+    expect(actionButton.fontSize).toBe("16px");
+    expect(actionButton.fontWeight).toBe("400");
+    expect(actionButton.borderRadius).toBe("40px");
+    const statusPanel = await page.locator(".report-status").evaluate((el) => getComputedStyle(el).padding);
+    expect(statusPanel).toBe("40px");
+    const officialCta = await page.locator(".report-section-value--cta").evaluate((el) => ({
+      height: el.getBoundingClientRect().height,
+      borderRadius: getComputedStyle(el).borderTopLeftRadius,
+    }));
+    expect(officialCta.height).toBe(64);
+    expect(officialCta.borderRadius).toBe("16px");
+    const checklistChip = await page.locator(".checklist-state").first().evaluate((el) => ({
+      height: el.getBoundingClientRect().height,
+      fontSize: getComputedStyle(el).fontSize,
+      fontWeight: getComputedStyle(el).fontWeight,
+      lineHeight: getComputedStyle(el).lineHeight,
+      padding: getComputedStyle(el).padding,
+    }));
+    expect(checklistChip.height).toBe(38);
+    expect(checklistChip.fontSize).toBe("16px");
+    expect(checklistChip.fontWeight).toBe("600");
+    expect(checklistChip.lineHeight).toBe("20px");
+    expect(checklistChip.padding).toBe("8px 20px");
     const reportCard = await page.locator(".report-section").first().evaluate((el) => ({
       text: el.scrollWidth,
       width: el.clientWidth,
@@ -1481,6 +1552,34 @@ test("completed report cards, sources, and disclosures stay readable and keyboar
     }));
     expect(reportCard.text).toBeLessThanOrEqual(reportCard.width);
     expect(reportCard.background).not.toBe("rgba(0, 0, 0, 0)");
+    const cardMetrics = await page.locator(".report-section").first().evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { radius: style.borderTopLeftRadius, padding: style.paddingLeft };
+    });
+    expect(cardMetrics.radius).toBe("16px");
+    expect(cardMetrics.padding).toBe(width === 390 ? "16px" : "24px");
+    const themeControlMetrics = await page.locator("[data-theme-control]").evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { size: style.fontSize, weight: style.fontWeight, height: el.getBoundingClientRect().height, padding: style.padding };
+    });
+    expect(themeControlMetrics.size).toBe("16px");
+    expect(themeControlMetrics.weight).toBe("400");
+    expect(themeControlMetrics.height).toBe(40);
+    expect(themeControlMetrics.padding).toBe("8px 12px 8px 8px");
+    const reportHeading = await page.locator(".report-section-title").first().evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { family: style.fontFamily, weight: style.fontWeight, size: style.fontSize, lineHeight: style.lineHeight };
+    });
+    const documentHeading = await page.locator(".report-doc-group-title").first().evaluate((el) => {
+      const style = getComputedStyle(el);
+      return { family: style.fontFamily, weight: style.fontWeight, size: style.fontSize, lineHeight: style.lineHeight };
+    });
+    for (const headingStyle of [reportHeading, documentHeading]) {
+      expect(headingStyle.family).toMatch(/^Archivo/);
+      expect(headingStyle.weight).toBe("800");
+      expect(headingStyle.size).toBe(width === 390 ? "22px" : "30px");
+      expect(headingStyle.lineHeight).toBe(width === 390 ? "26px" : "32px");
+    }
     await page.screenshot({ path: testInfo.outputPath(`report-${theme}-${width}.png`), fullPage: true });
   }
 });
@@ -1511,5 +1610,5 @@ test("shared typography uses the requested stacks and compact display metrics", 
   expect(parseFloat(typography.headingTracking) / parseFloat(typography.headingSize)).toBeCloseTo(-0.06, 2);
   expect(parseFloat(typography.headingLineHeight) / parseFloat(typography.headingSize)).toBeCloseTo(0.94, 2);
   expect(typography.bodySize).toBe("16px");
-  expect(parseFloat(typography.bodyLineHeight) / parseFloat(typography.bodySize)).toBeCloseTo(1.375, 2);
+  expect(parseFloat(typography.bodyLineHeight) / parseFloat(typography.bodySize)).toBeCloseTo(1.5, 2);
 });

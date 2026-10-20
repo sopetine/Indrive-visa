@@ -5,6 +5,7 @@ import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import net from "node:net";
+import { probeLiveWorker } from "./live-worker-probe.mjs";
 
 const required = ["AIFACTORY_PRODUCTION_URL", "AIFACTORY_DELIVERED_SHA", "AIFACTORY_EVIDENCE_DIR"];
 const missing = required.filter((key) => !process.env[key]?.trim());
@@ -181,20 +182,14 @@ try {
       const livePromptResponse = await fetch(new URL("visa-advisor-prompt.md", productionURL), { signal: liveController.signal });
       if (!livePromptResponse.ok) throw new Error(`payload unavailable: prompt returned HTTP ${livePromptResponse.status}`);
       const systemPrompt = (await livePromptResponse.text()).trim();
-      const response = await fetch("https://visa-advisor.sopetine.workers.dev", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...evidence.liveWorkerProbe.request, systemPrompt }),
-        signal: liveController.signal,
+      const { response, text: responseText, data } = await probeLiveWorker({
+        request: { ...evidence.liveWorkerProbe.request, systemPrompt }, signal: liveController.signal,
       });
       liveResponse = response;
       evidence.liveWorkerProbe.httpStatus = response.status;
-      liveText = await response.text();
+      liveText = responseText;
       clearTimeout(liveTimer);
-      try { liveData = JSON.parse(liveText); } catch { throw new Error(`payload unavailable: response was not JSON (${liveText.slice(0, 300)})`); }
-      if (!response.ok) throw new Error(`provider/request unavailable: HTTP ${response.status}: ${liveData.error || liveText.slice(0, 300)}`);
-      if (!liveData || liveData.type !== "report" || typeof liveData.markdown !== "string" || !liveData.markdown.trim()) {
-        throw new Error(`payload unavailable: expected a non-empty report; received ${JSON.stringify(liveData).slice(0, 500)}`);
-      }
+      liveData = data;
       evidence.liveWorkerProbe.outcome = "usable report received";
       await page.route("https://visa-advisor.sopetine.workers.dev/**", (route) => route.fulfill({ status: response.status, contentType: "application/json", body: liveText }));
       await page.getByRole("button", { name: "Edit", exact: true }).click();
@@ -212,9 +207,10 @@ try {
     } catch (error) {
       const reason = error.name === "TimeoutError" || error.name === "AbortError"
         ? `timeout after 45 seconds: ${error.message}` : error.message;
-      evidence.liveWorkerProbe.outcome = "unexercised";
+      if (error.httpStatus) evidence.liveWorkerProbe.httpStatus = error.httpStatus;
+      evidence.liveWorkerProbe.outcome = error.classification === "product defect" ? "failed (product defect)" : "unexercised";
       evidence.liveWorkerProbe.reason = reason;
-      if (evidence.liveWorkerProbe.httpStatus && liveData?.type === "report" && typeof liveData.markdown === "string" && liveData.markdown.trim()) throw error;
+      if (error.classification === "product defect" || (evidence.liveWorkerProbe.httpStatus && liveData?.type === "report" && typeof liveData.markdown === "string" && liveData.markdown.trim())) throw error;
     } finally { clearTimeout(liveTimer); }
       }
     } else {
