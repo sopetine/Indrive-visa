@@ -199,6 +199,8 @@ test("form introduction is a responsive hero labelled by its accessible heading"
       const subtitle = hero.querySelector(".form-subtitle");
       return {
         background: getComputedStyle(hero).backgroundColor,
+        markerBackground: getComputedStyle(title.querySelector(".hl")).backgroundColor,
+        submitWidth: document.querySelector("[data-submit]").getBoundingClientRect().width,
         titleFontSize: parseFloat(getComputedStyle(title).fontSize),
         heroWidth: hero.getBoundingClientRect().width,
         titleWidth: title.scrollWidth,
@@ -209,11 +211,13 @@ test("form introduction is a responsive hero labelled by its accessible heading"
         viewportWidth: document.documentElement.clientWidth,
       };
     });
-    expect(layout.background).toBe("rgb(193, 241, 29)");
-    expect(layout.titleFontSize).toBeGreaterThanOrEqual(38);
+    expect(layout.background).toBe("rgba(0, 0, 0, 0)");
+    expect(layout.markerBackground).toBe("rgb(193, 241, 29)");
+    expect(layout.titleFontSize).toBeGreaterThanOrEqual(44);
     expect(layout.titleWidth).toBeLessThanOrEqual(layout.titleClientWidth);
     expect(layout.subtitleWidth).toBeLessThanOrEqual(layout.subtitleClientWidth);
     expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
+    if (width === 390) expect(layout.submitWidth).toBeGreaterThanOrEqual(300);
   }
 });
 
@@ -264,7 +268,24 @@ test("mast branding, keyboard theme control, and responsive widths", async ({ pa
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/");
   await expect(page.getByRole("banner")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Visa Advisor — go to start" })).toBeVisible();
+  const brand = page.getByRole("link", { name: "VisaAdvisor" });
+  await expect(brand).toBeVisible();
+  await expect(brand.locator(".logo-mark")).toHaveAttribute("src", "images/logo-icon.svg");
+  await expect(brand.locator(".logo-text")).toHaveText("VisaAdvisor");
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "images/favicon.svg");
+  const fonts = await page.evaluate(async () => {
+    await document.fonts.ready;
+    return {
+      heading: getComputedStyle(document.querySelector("h1")).fontFamily,
+      body: getComputedStyle(document.querySelector("body")).fontFamily,
+      archivoLoaded: document.fonts.check('800 48px "Archivo"'),
+      interLoaded: document.fonts.check('400 16px "Inter"'),
+    };
+  });
+  expect(fonts.heading).toMatch(/^Archivo/);
+  expect(fonts.body).toMatch(/^Inter/);
+  expect(fonts.archivoLoaded).toBe(true);
+  expect(fonts.interLoaded).toBe(true);
   await expect(page.getByText("TRAVEL REQUIREMENTS")).toBeVisible();
   const navigation = page.getByRole("navigation", { name: "Site controls" });
   const theme = navigation.getByRole("button", { name: /Theme: Light/ });
@@ -276,7 +297,7 @@ test("mast branding, keyboard theme control, and responsive widths", async ({ pa
   await page.keyboard.press("Space");
   await expect(page.locator("body")).not.toHaveClass(/theme-light|theme-dark/);
   await page.emulateMedia({ colorScheme: "dark" });
-  expect(await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor)).toBe("rgb(20, 22, 18)");
+  expect(await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor)).toBe("rgb(20, 20, 20)");
   await page.keyboard.press("Enter");
   await expect(page.locator("body")).toHaveClass(/theme-light/);
 
@@ -288,7 +309,23 @@ test("mast branding, keyboard theme control, and responsive widths", async ({ pa
       mastHeight: document.querySelector(".site-header--advisor").getBoundingClientRect().height,
     }));
     expect(sizes.document, `document overflow at ${width}px`).toBeLessThanOrEqual(sizes.viewport);
-    expect(sizes.mastHeight, `mast height at ${width}px`).toBe(width <= 900 ? 66 : 80);
+    expect(sizes.mastHeight, `mast height at ${width}px`).toBe(width <= 900 ? 65 : 73);
+  }
+});
+
+test("site footer presents grouped advisor and travel information without overflow", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("visa-advisor.disclaimer", "v1"));
+  await page.goto("/");
+  const footer = page.getByRole("contentinfo");
+  await expect(footer).toBeVisible();
+  await expect(footer).toContainText("VisaAdvisor");
+  await expect(footer.getByRole("heading", { name: "About VisaAdvisor" })).toBeVisible();
+  await expect(footer.getByRole("heading", { name: "Before you travel" })).toBeVisible();
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await footer.scrollIntoViewIfNeeded();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await expect(footer).toBeInViewport();
   }
 });
 
@@ -774,7 +811,7 @@ test("the logo returns home and clears entered and saved form details", async ({
   const cachedReportKeys = await page.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("visa-advisor.report.")));
   expect(cachedReportKeys.length).toBeGreaterThan(0);
 
-  const logo = page.getByRole("link", { name: /Visa Advisor — go to start/ });
+  const logo = page.getByRole("link", { name: "VisaAdvisor" });
   await logo.click();
   await expect(page).toHaveURL(/#\/$/);
   await expect(nationality).toHaveValue("");
@@ -978,7 +1015,7 @@ test("research error retry and clarification remain operable across themes and w
   await page.locator("[data-theme-control]").click();
   await expect(page.locator("body")).not.toHaveClass(/theme-/);
   const retry = page.getByRole("button", { name: /try again/i });
-  await expect(retry).toHaveCSS("color", "rgb(20, 22, 18)");
+  await expect(retry).toHaveCSS("color", "rgb(20, 20, 20)");
   await retry.focus();
   await expect(retry).toBeFocused();
   await retry.press("Enter");
@@ -992,7 +1029,7 @@ test("research error retry and clarification remain operable across themes and w
   await answer.fill("Canadian passport");
   const sendAnswer = page.getByRole("button", { name: /send answer/i });
   await expect(sendAnswer).toBeEnabled();
-  await expect(sendAnswer).toHaveCSS("color", "rgb(20, 22, 18)");
+  await expect(sendAnswer).toHaveCSS("color", "rgb(20, 20, 20)");
   await sendAnswer.click();
   await expect(page.getByText("Visa-free", { exact: true }).first()).toBeVisible();
 });
@@ -1254,11 +1291,11 @@ test("semantic theme tokens support explicit light, explicit dark, and system fa
   expect(await token("--color-error")).toBe("#a73523");
 
   await page.locator("body").evaluate((body) => body.classList.replace("theme-light", "theme-dark"));
-  expect(await token("--color-bg")).toBe("#141612");
-  expect(await token("--color-card")).toBe("#24271f");
-  expect(await token("--color-field")).toBe("#20231c");
+  expect(await token("--color-bg")).toBe("#141414");
+  expect(await token("--color-card")).toBe("#1f1f1f");
+  expect(await token("--color-field")).toBe("#262626");
   expect(await token("--color-ink")).toBe("#f5f5ec");
-  expect(await token("--main-white")).toBe("#24271f");
+  expect(await token("--main-white")).toBe("#1f1f1f");
   expect(await token("--text-and-icon-primary")).toBe("#f5f5ec");
   expect(await token("--extensions-background-lighterror")).toBe("#592d29");
   expect(await token("--extensions-background-lightwarning")).toBe("#51451f");
@@ -1312,7 +1349,8 @@ test("semantic theme tokens support explicit light, explicit dark, and system fa
 
   await page.locator("body").evaluate((body) => body.classList.remove("theme-dark"));
   await page.emulateMedia({ colorScheme: "dark" });
-  expect(await token("--color-bg")).toBe("#141612");
+  expect(await token("--color-bg")).toBe("#141414");
+  expect(await token("--color-field")).toBe("#262626");
   expect(await token("--color-ink")).toBe("#f5f5ec");
 });
 
@@ -1435,7 +1473,7 @@ test("completed report cards, sources, and disclosures stay readable and keyboar
     }));
     expect(routeChip.text).toBe("Georgia / Paris");
     expect(routeChip.color).toBe(theme === "dark" ? "rgb(245, 245, 236)" : "rgb(20, 20, 20)");
-    expect(routeChip.background).toBe(theme === "dark" ? "rgb(20, 22, 18)" : "rgb(255, 254, 233)");
+    expect(routeChip.background).toBe(theme === "dark" ? "rgb(20, 20, 20)" : "rgb(255, 254, 233)");
     const reportCard = await page.locator(".report-section").first().evaluate((el) => ({
       text: el.scrollWidth,
       width: el.clientWidth,
@@ -1459,13 +1497,15 @@ test("shared typography uses the requested stacks and compact display metrics", 
       bodyFamily: getComputedStyle(document.documentElement).getPropertyValue("--font-family-body").trim(),
       headingSize: headingStyle.fontSize,
       headingTracking: headingStyle.letterSpacing,
+      headingStretch: headingStyle.fontStretch,
       headingLineHeight: headingStyle.lineHeight,
       bodySize: bodyStyle.fontSize,
       bodyLineHeight: bodyStyle.lineHeight,
     };
   });
-  expect(typography.headingFamily).toMatch(/^"Agrandir", "Suisse", Arial, system-ui, sans-serif$/);
-  expect(typography.bodyFamily).toMatch(/^"Suisse", Arial, system-ui, sans-serif$/);
+  expect(typography.headingFamily).toBe('"Archivo", system-ui, sans-serif');
+  expect(typography.headingStretch).toBe("112%");
+  expect(typography.bodyFamily).toBe('"Inter", system-ui, sans-serif');
   expect(parseFloat(typography.headingSize)).toBeGreaterThanOrEqual(42);
   expect(parseFloat(typography.headingSize)).toBeLessThanOrEqual(112);
   expect(parseFloat(typography.headingTracking) / parseFloat(typography.headingSize)).toBeCloseTo(-0.06, 2);

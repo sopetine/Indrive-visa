@@ -1,5 +1,7 @@
 # Visa Advisor
 
+The static advisor UI uses the VisaAdvisor lime V brand, responsive form, report, and footer layouts, and explicit light and dark themes. Headings use Archivo and body/UI text uses Inter, loaded from Google Fonts.
+
 This repository has one source branch: `main`.
 
 ## What lives here
