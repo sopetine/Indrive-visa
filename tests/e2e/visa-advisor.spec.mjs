@@ -1022,9 +1022,12 @@ test("research progress stays indeterminate until the report is ready", async ({
 
 test("research error retry and clarification remain operable across themes and widths", async ({ page }, testInfo) => {
   let requests = 0;
+  let releaseFirstRequest;
+  const firstRequestHeld = new Promise((resolve) => { releaseFirstRequest = resolve; });
   await page.route("https://visa-advisor.sopetine.workers.dev/", async (route) => {
     requests += 1;
     if (requests === 1) {
+      await firstRequestHeld;
       await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Service temporarily unavailable" }) });
       return;
     }
@@ -1039,8 +1042,13 @@ test("research error retry and clarification remain operable across themes and w
   await page.getByLabel(/Destination city/).fill("Paris");
   await page.getByRole("button", { name: /Check requirements/ }).click();
 
+  const backToTop = page.getByRole("link", { name: "Back to top" });
+  await expect(page.locator("[data-report-loading]")).toBeVisible();
+  await expect(backToTop).toHaveCount(0);
+  releaseFirstRequest();
   const error = page.locator("[data-report-error]");
   await expect(error).toBeVisible();
+  await expect(backToTop).toHaveCount(0);
   await expect(error).toHaveAttribute("role", "alert");
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 844 });
@@ -1067,6 +1075,7 @@ test("research error retry and clarification remain operable across themes and w
   await retry.press("Enter");
   const clarify = page.locator("[data-report-clarify]");
   await expect(clarify).toBeVisible();
+  await expect(backToTop).toHaveCount(0);
   await expect(clarify).toContainText("Which passport will you travel on?");
   await page.screenshot({ path: testInfo.outputPath("report-clarification-dark-mobile.png"), fullPage: true });
   const answer = page.getByLabel("Your answer");
@@ -1642,6 +1651,54 @@ test("completed report cards, sources, and disclosures stay readable and keyboar
     }
     await page.screenshot({ path: testInfo.outputPath(`report-${theme}-${width}.png`), fullPage: true });
   }
+});
+
+test("completed report has a keyboard accessible back-to-top link without restarting research", async ({ page }) => {
+  let requests = 0;
+  await page.route("https://visa-advisor.sopetine.workers.dev/", async (route) => {
+    requests += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(report) });
+  });
+  await page.setViewportSize({ width: 390, height: 720 });
+  await page.goto("/#/report?nat=Canadian&from=Georgia&dst=Paris");
+  const consent = page.getByRole("button", { name: "I understand" });
+  if (await consent.isVisible().catch(() => false)) await consent.click();
+
+  const link = page.getByRole("link", { name: "Back to top" });
+  const body = page.locator("[data-report-body]");
+  await expect(link).toBeVisible();
+  await expect(body.locator(":scope > :last-child")).toHaveText("Back to top");
+  await expect(body.locator(":scope > .report-disclaimer").locator("xpath=following-sibling::*[1]")).toHaveAttribute("class", "report-back-to-top");
+  await expect(page.locator("#report-top")).toHaveCount(1);
+  await expect(link).toHaveAttribute("href", "#report-top");
+  await expect(body.getByRole("link", { name: "Back to top" })).toHaveCount(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await link.click();
+  await expect.poll(() => page.locator("#report-top").evaluate((el) => el.getBoundingClientRect().top)).toBeLessThan(10);
+  await expect(page).toHaveURL(/#report-top$/);
+  await expect(page.locator('[data-view="report"]')).toBeVisible();
+  expect(requests).toBe(1);
+
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.evaluate(() => document.activeElement?.blur());
+  for (let tab = 0; tab < 60 && !(await link.evaluate((el) => el === document.activeElement)); tab += 1) {
+    await page.keyboard.press("Tab");
+  }
+  await expect(link).toBeFocused();
+  const focusStyle = await link.evaluate((el) => ({
+    outlineStyle: getComputedStyle(el).outlineStyle,
+    outlineWidth: getComputedStyle(el).outlineWidth,
+  }));
+  expect(focusStyle.outlineStyle).not.toBe("none");
+  expect(focusStyle.outlineWidth).not.toBe("0px");
+  await page.keyboard.press("Enter");
+  await expect.poll(() => page.locator("#report-top").evaluate((el) => el.getBoundingClientRect().top)).toBeLessThan(10);
+  expect(requests).toBe(1);
+
+  await page.emulateMedia({ media: "print" });
+  await expect(link).toBeHidden();
 });
 
 test("shared typography uses the requested stacks and compact display metrics", async ({ page }) => {

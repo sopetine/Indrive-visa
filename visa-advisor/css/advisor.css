@@ -690,6 +690,14 @@
   gap: var(--sp-3);
 }
 .report-body[hidden] { display: none; }
+.report-back-to-top {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  min-height: 24px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
 
 /* Status hero (the big answer) — solid color block, indrive-style stat callout */
 .report-status {
@@ -1992,6 +2000,7 @@ body.theme-dark .action-bar-progress-step { color: #f5f5ec; }
   [data-view="report"] form, [data-view="report"] [data-print-fallback],
   [data-view="report"] [data-report-loading], [data-view="report"] [data-report-error],
   [data-view="report"] [data-report-clarify], [data-view="report"] [data-action-bar-progress] { display: none !important; }
+  [data-view="report"] .report-back-to-top { display: none !important; }
   [data-view="report"] .print-report-header { display: block !important; margin-bottom: 1.5rem; border-bottom: 1px solid #777; }
   [data-view="report"] .container--narrow { max-width: none; padding: 0; }
   [data-view="report"] .report, [data-view="report"] .report-body { width: 100%; max-width: none; margin: 0; padding: 0; }
