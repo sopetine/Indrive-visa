@@ -157,27 +157,50 @@ test("report verdict stays readable beside a long allowed stay at responsive wid
   const badge = page.locator(".status-badge");
   await expect(badge).toContainText("Embassy / consulate visa required");
 
-  for (const width of [601, 390, 1440]) {
-    await page.setViewportSize({ width, height: 900 });
-    await expect(badge).toBeVisible();
-    const layout = await page.evaluate(() => {
-      const badge = document.querySelector(".status-badge");
-      const text = badge.lastElementChild;
-      const range = document.createRange();
-      range.selectNodeContents(text);
-      const rects = [...range.getClientRects()];
-      return {
-        documentWidth: document.documentElement.scrollWidth,
-        viewportWidth: document.documentElement.clientWidth,
-        badgeWidth: badge.getBoundingClientRect().width,
-        verdictWidth: text.getBoundingClientRect().width,
-        lineCount: rects.length,
-      };
-    });
-    expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
-    expect(layout.verdictWidth).toBeGreaterThan(width === 601 ? 120 : 40);
-    expect(layout.lineCount).toBeGreaterThan(0);
-    await page.screenshot({ path: testInfo.outputPath(`report-${width}.png`), fullPage: true });
+  for (const theme of ["light", "dark"]) {
+    for (const width of [601, 390, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      while (await page.locator("body").getAttribute("class") !== `theme-${theme}`) {
+        await page.locator("[data-theme-control]").click();
+      }
+      await expect(badge).toBeVisible();
+      const layout = await page.evaluate(() => {
+        const badge = document.querySelector(".status-badge");
+        const text = badge.lastElementChild;
+        const stay = document.querySelector(".status-stay-value");
+        const lineCount = (element) => {
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+        };
+        return {
+          documentWidth: document.documentElement.scrollWidth,
+          viewportWidth: document.documentElement.clientWidth,
+          badgeWidth: badge.getBoundingClientRect().width,
+          verdictWidth: text.getBoundingClientRect().width,
+          badgeLines: lineCount(text),
+          stayLines: lineCount(stay),
+          badgeTop: badge.getBoundingClientRect().top,
+          stayTop: stay.getBoundingClientRect().top,
+          badgeRight: badge.getBoundingClientRect().right,
+          stayLeft: stay.getBoundingClientRect().left,
+          panelOverflow: document.querySelector(".report-status").scrollWidth > document.querySelector(".report-status").clientWidth,
+        };
+      });
+      expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
+      if (width === 1440) expect(layout.verdictWidth).toBeGreaterThan(120);
+      expect(layout.badgeLines).toBeGreaterThan(0);
+      if (width === 1440) expect(layout.badgeLines).toBeLessThanOrEqual(2);
+      expect(layout.stayLines).toBeGreaterThan(0);
+      if (width === 1440) expect(layout.stayLines).toBeLessThanOrEqual(2);
+      expect(layout.panelOverflow).toBe(false);
+      if (width === 390) expect(layout.stayTop).toBeGreaterThan(layout.badgeTop);
+      if (width === 1440) {
+        expect(layout.badgeRight).toBeLessThanOrEqual(layout.stayLeft);
+        expect(Math.abs(layout.badgeTop - layout.stayTop)).toBeLessThan(24);
+      }
+      await page.screenshot({ path: testInfo.outputPath(`report-${theme}-${width}.png`), fullPage: true });
+    }
   }
 });
 
@@ -1526,7 +1549,7 @@ test("completed report cards, sources, and disclosures stay readable and keyboar
     expect(actionButton.fontWeight).toBe("400");
     expect(actionButton.borderRadius).toBe("40px");
     const statusPanel = await page.locator(".report-status").evaluate((el) => getComputedStyle(el).padding);
-    expect(statusPanel).toBe("40px");
+    expect(statusPanel).toBe("24px");
     const officialCta = await page.locator(".report-section-value--cta").evaluate((el) => ({
       height: el.getBoundingClientRect().height,
       borderRadius: getComputedStyle(el).borderTopLeftRadius,
@@ -1574,11 +1597,40 @@ test("completed report cards, sources, and disclosures stay readable and keyboar
       const style = getComputedStyle(el);
       return { family: style.fontFamily, weight: style.fontWeight, size: style.fontSize, lineHeight: style.lineHeight };
     });
-    for (const headingStyle of [reportHeading, documentHeading]) {
-      expect(headingStyle.family).toMatch(/^Archivo/);
-      expect(headingStyle.weight).toBe("800");
-      expect(headingStyle.size).toBe(width === 390 ? "22px" : "30px");
-      expect(headingStyle.lineHeight).toBe(width === 390 ? "26px" : "32px");
+    expect(reportHeading.family).toMatch(/^Archivo/);
+    expect(reportHeading.weight).toBe("800");
+    expect(reportHeading.size).toBe(width === 390 ? "22px" : "30px");
+    expect(reportHeading.lineHeight).toBe(width === 390 ? "26px" : "32px");
+    expect(documentHeading.family).toMatch(/^Archivo/);
+    expect(documentHeading.weight).toBe("800");
+    expect(documentHeading.size).toBe("16px");
+    expect(documentHeading.lineHeight).toBe("24px");
+    expect(parseFloat(documentHeading.size)).toBeLessThan(parseFloat(reportHeading.size));
+    const statusLayout = await page.locator(".report-status").evaluate((panel) => {
+      const badge = panel.querySelector(".status-badge");
+      const stay = panel.querySelector(".status-stay-value");
+      const lineCount = (element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+      };
+      return {
+        badgeLines: lineCount(badge.lastElementChild),
+        stayLines: stay ? lineCount(stay) : null,
+        badgeTop: badge.getBoundingClientRect().top,
+        stayTop: stay?.getBoundingClientRect().top ?? null,
+        badgeRight: badge.getBoundingClientRect().right,
+        stayLeft: stay?.getBoundingClientRect().left ?? null,
+        overflow: panel.scrollWidth > panel.clientWidth,
+      };
+    });
+    expect(statusLayout.badgeLines).toBeLessThanOrEqual(2);
+    if (statusLayout.stayLines !== null) expect(statusLayout.stayLines).toBeLessThanOrEqual(2);
+    expect(statusLayout.overflow).toBe(false);
+    if (width === 390 && statusLayout.stayTop !== null) expect(statusLayout.stayTop).toBeGreaterThan(statusLayout.badgeTop);
+    if (width === 1440 && statusLayout.stayLeft !== null) {
+      expect(statusLayout.badgeRight).toBeLessThanOrEqual(statusLayout.stayLeft);
+      expect(Math.abs(statusLayout.badgeTop - statusLayout.stayTop)).toBeLessThan(24);
     }
     await page.screenshot({ path: testInfo.outputPath(`report-${theme}-${width}.png`), fullPage: true });
   }
